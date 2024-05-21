@@ -123,8 +123,10 @@ fn main() {
 }
 
 fn run() -> Result<(), &'static str> {
-    HotkeyManager::new()?;
-    KeyboardHookManager::new()?;
+    // The variables have to be here to keep the scope.
+    // If we remove them, the destructors are called immediately. Fun.
+    let _hotkey_manager = HotkeyManager::new()?;
+    let _keyboard_hook_manager = KeyboardHookManager::new()?;
 
     println!("Keyboard hooked. Press Alt+A and then X to exit.");
 
