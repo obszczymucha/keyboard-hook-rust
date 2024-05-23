@@ -7,8 +7,8 @@ use std::thread;
 use std::time::Duration;
 
 use types::Modifiers;
-use windows::HookAction;
 use windows::HookAction::{PassOn, Quit, Suppress};
+use windows::{HookAction, KeypressCallback};
 
 use crate::windows::KeyboardHookManager;
 
@@ -66,36 +66,40 @@ const TIMEOUT_MS: u64 = 650;
 
 static WAITING_FOR_NEXT_KEY: AtomicBool = AtomicBool::new(false);
 
-fn handle_key_press(vk_code: u32, modifiers: &Modifiers) -> HookAction {
-    if WAITING_FOR_NEXT_KEY.load(Ordering::SeqCst) {
-        if vk_code == FOLLOWUP_KEY {
-            println!("Captured sequence: Alt+A -> X. Exiting...");
-            return Quit;
-        } else {
-            println!("No mapping for {}. Resetting...", vk_code as u8 as char);
-            WAITING_FOR_NEXT_KEY.store(false, Ordering::SeqCst);
+struct KeypressHandler;
+
+impl KeypressCallback for KeypressHandler {
+    fn handle(&self, key: u32, modifiers: &Modifiers) -> HookAction {
+        if WAITING_FOR_NEXT_KEY.load(Ordering::SeqCst) {
+            if key == FOLLOWUP_KEY {
+                println!("Captured sequence: Alt+A -> X. Exiting...");
+                return Quit;
+            } else {
+                println!("No mapping for {}. Resetting...", key as u8 as char);
+                WAITING_FOR_NEXT_KEY.store(false, Ordering::SeqCst);
+                return Suppress;
+            }
+        }
+
+        if key == LEADER_KEY && modifiers.left_alt {
+            WAITING_FOR_NEXT_KEY.store(true, Ordering::SeqCst);
+            println!("Leader key pressed.");
+
+            let waiting_for_next_key = Arc::new(AtomicBool::new(true));
+            let waiting_for_next_key_clone = Arc::clone(&waiting_for_next_key);
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(TIMEOUT_MS));
+                if waiting_for_next_key_clone.load(Ordering::SeqCst) {
+                    println!("Timeout. Resetting...");
+                    waiting_for_next_key_clone.store(false, Ordering::SeqCst);
+                }
+            });
+
             return Suppress;
         }
+
+        PassOn
     }
-
-    if vk_code == LEADER_KEY && modifiers.left_alt {
-        WAITING_FOR_NEXT_KEY.store(true, Ordering::SeqCst);
-        println!("Leader key pressed.");
-
-        let waiting_for_next_key = Arc::new(AtomicBool::new(true));
-        let waiting_for_next_key_clone = Arc::clone(&waiting_for_next_key);
-        thread::spawn(move || {
-            thread::sleep(Duration::from_millis(TIMEOUT_MS));
-            if waiting_for_next_key_clone.load(Ordering::SeqCst) {
-                println!("Timeout. Resetting...");
-                waiting_for_next_key_clone.store(false, Ordering::SeqCst);
-            }
-        });
-
-        return Suppress;
-    }
-
-    PassOn
 }
 
 fn main() {
@@ -107,7 +111,9 @@ fn main() {
 
 fn run() -> Result<(), &'static str> {
     let mut manager = KeyboardHookManager::new()?;
-    manager.hook(handle_key_press, || {
+    let handler = Box::new(KeypressHandler);
+
+    manager.hook(handler, || {
         println!("Keyboard hooked. Press Alt+A and then X to exit.");
     })
 }

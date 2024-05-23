@@ -25,12 +25,16 @@ pub enum HookAction {
     Quit,
 }
 
-type KeypressCallback = fn(u32, &Modifiers) -> HookAction;
+pub trait KeypressCallback {
+    fn handle(&self, key: u32, modifiers: &Modifiers) -> HookAction;
+}
+
 type Callback = fn() -> ();
+type BoxedKeypressCallback = Box<dyn KeypressCallback>;
 
 pub struct KeyboardHookManager {
     hook: Option<HHOOK>,
-    callback: Option<KeypressCallback>,
+    callback: Option<BoxedKeypressCallback>,
 }
 
 impl KeyboardHookManager {
@@ -43,7 +47,7 @@ impl KeyboardHookManager {
 
     pub fn hook(
         &mut self,
-        keypress_callback: KeypressCallback,
+        keypress_callback: BoxedKeypressCallback,
         on_hook_callback: Callback,
     ) -> Result<(), &'static str> {
         unsafe {
@@ -104,7 +108,7 @@ impl KeyboardHookManager {
 
         let manager = &*manager_ptr;
         let hook = manager.hook.expect("No hook found!");
-        let callback = manager.callback.expect("No callback found!");
+        let callback = manager.callback.as_ref().expect("No callback found!");
 
         if n_code != 0 || (w_param != WM_KEYDOWN as WPARAM && w_param != WM_SYSKEYDOWN as WPARAM) {
             return CallNextHookEx(hook, n_code, w_param, l_param);
@@ -115,7 +119,7 @@ impl KeyboardHookManager {
             left_alt: (GetKeyState(VK_LMENU) as u16 & KEY_PRESSED_MASK) != 0,
         };
 
-        match callback(p_keyboard.vkCode, &modifiers) {
+        match callback.handle(p_keyboard.vkCode, &modifiers) {
             HookAction::Suppress => 1,
             HookAction::PassOn => CallNextHookEx(hook, n_code, w_param, l_param),
             HookAction::Quit => {
