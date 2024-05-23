@@ -24,6 +24,9 @@ pub struct KeyboardHookManager {
     callback: Option<fn(u32, &Modifiers) -> bool>,
 }
 
+type KeypressCallback = fn(u32, &Modifiers) -> bool;
+type Callback = fn() -> ();
+
 impl KeyboardHookManager {
     pub fn new() -> Result<Self, &'static str> {
         Ok(Self {
@@ -32,14 +35,18 @@ impl KeyboardHookManager {
         })
     }
 
-    pub fn hook(&mut self, callback: fn(u32, &Modifiers) -> bool) -> Result<(), &'static str> {
+    pub fn hook(
+        &mut self,
+        keypress_callback: KeypressCallback,
+        on_hook_callback: Callback,
+    ) -> Result<(), &'static str> {
         unsafe {
             if !HOOK_MANAGER.is_null() {
                 return Err("Keyboard hook is already installed.");
             }
 
             HOOK_MANAGER = self;
-            self.callback = Some(callback);
+            self.callback = Some(keypress_callback);
 
             let hook = SetWindowsHookExW(
                 WH_KEYBOARD_LL,
@@ -53,6 +60,7 @@ impl KeyboardHookManager {
             }
 
             self.hook = Some(hook);
+            on_hook_callback();
             self.windows_loop();
             Ok(())
         }

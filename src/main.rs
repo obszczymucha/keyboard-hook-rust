@@ -104,11 +104,8 @@ fn main() {
 }
 
 fn run() -> Result<(), &'static str> {
-    // The variable has to be here to keep the scope.
-    // If we remove it, the destructor is called immediately. Fun.
     let mut manager = KeyboardHookManager::new()?;
-    manager.hook(handle_key_press)?;
-
-    println!("Keyboard hooked. Press Alt+A and then X to exit.");
-    Ok(())
+    manager.hook(handle_key_press, || {
+        println!("Keyboard hooked. Press Alt+A and then X to exit.");
+    })
 }
