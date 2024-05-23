@@ -7,8 +7,10 @@ use std::thread;
 use std::time::Duration;
 
 use types::Modifiers;
+use windows::HookAction;
+use windows::HookAction::{PassOn, Quit, Suppress};
 
-use crate::windows::{quit_windows_app, KeyboardHookManager};
+use crate::windows::KeyboardHookManager;
 
 const LEADER_KEY: u32 = b'A' as u32;
 const FOLLOWUP_KEY: u32 = b'X' as u32;
@@ -64,16 +66,16 @@ const TIMEOUT_MS: u64 = 650;
 
 static WAITING_FOR_NEXT_KEY: AtomicBool = AtomicBool::new(false);
 
-fn handle_key_press(vk_code: u32, modifiers: &Modifiers) -> bool {
+fn handle_key_press(vk_code: u32, modifiers: &Modifiers) -> HookAction {
     if WAITING_FOR_NEXT_KEY.load(Ordering::SeqCst) {
         if vk_code == FOLLOWUP_KEY {
             println!("Captured sequence: Alt+A -> X. Exiting...");
-            quit_windows_app();
+            return Quit;
         } else {
             println!("No mapping for {}. Resetting...", vk_code as u8 as char);
             WAITING_FOR_NEXT_KEY.store(false, Ordering::SeqCst);
+            return Suppress;
         }
-        return true;
     }
 
     if vk_code == LEADER_KEY && modifiers.left_alt {
@@ -90,10 +92,10 @@ fn handle_key_press(vk_code: u32, modifiers: &Modifiers) -> bool {
             }
         });
 
-        return true;
+        return Suppress;
     }
 
-    false
+    PassOn
 }
 
 fn main() {

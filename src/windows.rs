@@ -19,13 +19,19 @@ static mut HOOK_MANAGER: *const KeyboardHookManager = ptr::null();
 
 const KEY_PRESSED_MASK: u16 = 0x8000;
 
-pub struct KeyboardHookManager {
-    hook: Option<HHOOK>,
-    callback: Option<fn(u32, &Modifiers) -> bool>,
+pub enum HookAction {
+    Suppress,
+    PassOn,
+    Quit,
 }
 
-type KeypressCallback = fn(u32, &Modifiers) -> bool;
+type KeypressCallback = fn(u32, &Modifiers) -> HookAction;
 type Callback = fn() -> ();
+
+pub struct KeyboardHookManager {
+    hook: Option<HHOOK>,
+    callback: Option<KeypressCallback>,
+}
 
 impl KeyboardHookManager {
     pub fn new() -> Result<Self, &'static str> {
@@ -61,12 +67,18 @@ impl KeyboardHookManager {
 
             self.hook = Some(hook);
             on_hook_callback();
-            self.windows_loop();
+            Self::start_windows_loop();
             Ok(())
         }
     }
 
-    fn windows_loop(&self) {
+    fn stop_windows_loop() {
+        unsafe {
+            PostQuitMessage(0);
+        }
+    }
+
+    fn start_windows_loop() {
         unsafe {
             let mut msg: MSG = std::mem::zeroed();
             while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) != 0 {
@@ -103,10 +115,13 @@ impl KeyboardHookManager {
             left_alt: (GetKeyState(VK_LMENU) as u16 & KEY_PRESSED_MASK) != 0,
         };
 
-        if callback(p_keyboard.vkCode, &modifiers) {
-            1
-        } else {
-            CallNextHookEx(hook, n_code, w_param, l_param)
+        match callback(p_keyboard.vkCode, &modifiers) {
+            HookAction::Suppress => 1,
+            HookAction::PassOn => CallNextHookEx(hook, n_code, w_param, l_param),
+            HookAction::Quit => {
+                KeyboardHookManager::stop_windows_loop();
+                1
+            }
         }
     }
 }
@@ -119,11 +134,5 @@ impl Drop for KeyboardHookManager {
                 HOOK_MANAGER = ptr::null();
             }
         }
-    }
-}
-
-pub fn quit_windows_app() {
-    unsafe {
-        PostQuitMessage(0);
     }
 }
