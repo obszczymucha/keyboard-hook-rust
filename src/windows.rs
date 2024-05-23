@@ -22,7 +22,6 @@ const KEY_PRESSED_MASK: u16 = 0x8000;
 pub enum HookAction {
     Suppress,
     PassOn,
-    Quit,
 }
 
 pub trait KeypressCallback {
@@ -76,7 +75,7 @@ impl KeyboardHookManager {
         }
     }
 
-    fn stop_windows_loop() {
+    pub fn stop_windows_loop() {
         unsafe {
             PostQuitMessage(0);
         }
@@ -122,10 +121,6 @@ impl KeyboardHookManager {
         match callback.handle(p_keyboard.vkCode, &modifiers) {
             HookAction::Suppress => 1,
             HookAction::PassOn => CallNextHookEx(hook, n_code, w_param, l_param),
-            HookAction::Quit => {
-                KeyboardHookManager::stop_windows_loop();
-                1
-            }
         }
     }
 }

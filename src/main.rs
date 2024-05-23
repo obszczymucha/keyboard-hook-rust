@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 
 use types::Modifiers;
-use windows::HookAction::{PassOn, Quit, Suppress};
+use windows::HookAction::{PassOn, Suppress};
 use windows::{HookAction, KeypressCallback};
 
 use crate::windows::KeyboardHookManager;
@@ -73,7 +73,8 @@ impl KeypressCallback for KeypressHandler {
         if WAITING_FOR_NEXT_KEY.load(Ordering::SeqCst) {
             if key == FOLLOWUP_KEY {
                 println!("Captured sequence: Alt+A -> X. Exiting...");
-                return Quit;
+                KeyboardHookManager::stop_windows_loop();
+                return Suppress;
             } else {
                 println!("No mapping for {}. Resetting...", key as u8 as char);
                 WAITING_FOR_NEXT_KEY.store(false, Ordering::SeqCst);
