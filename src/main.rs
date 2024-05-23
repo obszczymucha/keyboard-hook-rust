@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use types::Modifiers;
 
-use crate::windows::{quit_windows_app, windows_loop, KeyboardHookManager};
+use crate::windows::{quit_windows_app, KeyboardHookManager};
 
 const LEADER_KEY: u32 = b'A' as u32;
 const FOLLOWUP_KEY: u32 = b'X' as u32;
@@ -76,7 +76,7 @@ fn handle_key_press(vk_code: u32, modifiers: &Modifiers) -> bool {
         return true;
     }
 
-    if vk_code == LEADER_KEY && modifiers.left_alt == true {
+    if vk_code == LEADER_KEY && modifiers.left_alt {
         WAITING_FOR_NEXT_KEY.store(true, Ordering::SeqCst);
         println!("Leader key pressed.");
 
@@ -106,10 +106,9 @@ fn main() {
 fn run() -> Result<(), &'static str> {
     // The variable has to be here to keep the scope.
     // If we remove it, the destructor is called immediately. Fun.
-    let _keyboard_hook_manager = KeyboardHookManager::new()?;
+    let mut manager = KeyboardHookManager::new()?;
+    manager.hook(handle_key_press)?;
 
     println!("Keyboard hooked. Press Alt+A and then X to exit.");
-    windows_loop();
-
     Ok(())
 }
