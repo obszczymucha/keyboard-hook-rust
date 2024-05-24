@@ -1,20 +1,16 @@
+mod action_handler;
+mod key_handler;
 mod types;
 mod windows;
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 
-use types::Modifiers;
-use windows::HookAction::{PassOn, Suppress};
-use windows::{HookAction, KeypressCallback};
+use action_handler::ActionHandler;
+use key_handler::KeypressHandler;
+use types::Action;
 
 use crate::windows::KeyboardHookManager;
-
-const LEADER_KEY: u32 = b'A' as u32;
-const FOLLOWUP_KEY: u32 = b'X' as u32;
-const TIMEOUT_MS: u64 = 650;
 
 // const MOD_CONTROL: u8 = 0x0002;
 // const MOD_SHIFT: u8 = 0x0004;
@@ -64,45 +60,6 @@ const TIMEOUT_MS: u64 = 650;
 //     Final { code: u32, action: Action },
 // }
 
-static WAITING_FOR_NEXT_KEY: AtomicBool = AtomicBool::new(false);
-
-struct KeypressHandler;
-
-impl KeypressCallback for KeypressHandler {
-    fn handle(&self, key: u32, modifiers: &Modifiers) -> HookAction {
-        if WAITING_FOR_NEXT_KEY.load(Ordering::SeqCst) {
-            if key == FOLLOWUP_KEY {
-                println!("Captured sequence: Alt+A -> X. Exiting...");
-                KeyboardHookManager::stop_windows_loop();
-                return Suppress;
-            } else {
-                println!("No mapping for {}. Resetting...", key as u8 as char);
-                WAITING_FOR_NEXT_KEY.store(false, Ordering::SeqCst);
-                return Suppress;
-            }
-        }
-
-        if key == LEADER_KEY && modifiers.left_alt {
-            WAITING_FOR_NEXT_KEY.store(true, Ordering::SeqCst);
-            println!("Leader key pressed.");
-
-            let waiting_for_next_key = Arc::new(AtomicBool::new(true));
-            let waiting_for_next_key_clone = Arc::clone(&waiting_for_next_key);
-            thread::spawn(move || {
-                thread::sleep(Duration::from_millis(TIMEOUT_MS));
-                if waiting_for_next_key_clone.load(Ordering::SeqCst) {
-                    println!("Timeout. Resetting...");
-                    waiting_for_next_key_clone.store(false, Ordering::SeqCst);
-                }
-            });
-
-            return Suppress;
-        }
-
-        PassOn
-    }
-}
-
 fn main() {
     if let Err(e) = run() {
         eprintln!("{}", e);
@@ -111,10 +68,20 @@ fn main() {
 }
 
 fn run() -> Result<(), &'static str> {
-    let mut manager = KeyboardHookManager::new()?;
-    let handler = Box::new(KeypressHandler);
+    let (tx, rx) = mpsc::channel::<Action>();
 
-    manager.hook(handler, || {
-        println!("Keyboard hooked. Press Alt+A and then X to exit.");
-    })
+    let consumer_handle = thread::spawn(|| {
+        let consumer = ActionHandler::new(rx);
+        consumer.start();
+    });
+
+    let producer_handle = thread::spawn(move || {
+        let mut manager = KeyboardHookManager::new()?;
+        let handler = Box::new(KeypressHandler::new(tx.clone()));
+        manager.hook(tx.clone(), handler)
+    });
+
+    let _ = producer_handle.join().unwrap();
+    consumer_handle.join().unwrap();
+    Ok(())
 }
