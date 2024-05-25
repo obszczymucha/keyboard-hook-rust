@@ -11,12 +11,10 @@ use winapi::um::winuser::{
     TranslateMessage, UnhookWindowsHookEx, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN,
     WM_SYSKEYDOWN,
 };
-// use winapi::um::winuser::{
-//     VK_LCONTROL, VK_LSHIFT, VK_LWIN, VK_RCONTROL, VK_RMENU, VK_RSHIFT, VK_RWIN,
-// };
+
 use winapi::um::winuser::VK_LMENU;
 
-static mut HOOK_MANAGER: *const KeyboardHookManager = ptr::null();
+static mut HOOK_MANAGER: *mut KeyboardHookManager = ptr::null_mut();
 
 const KEY_PRESSED_MASK: u16 = 0x8000;
 
@@ -91,7 +89,7 @@ impl KeyboardHookManager {
         }
     }
 
-    fn get_instance() -> *const KeyboardHookManager {
+    fn get_instance() -> *mut KeyboardHookManager {
         unsafe { HOOK_MANAGER }
     }
 
@@ -130,7 +128,7 @@ impl Drop for KeyboardHookManager {
         if let Some(hook) = self.hook {
             unsafe {
                 UnhookWindowsHookEx(hook);
-                HOOK_MANAGER = ptr::null();
+                HOOK_MANAGER = ptr::null_mut();
             }
         }
     }
