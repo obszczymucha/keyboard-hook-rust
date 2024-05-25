@@ -47,7 +47,9 @@ impl KeypressHandler {
         state.key_buffer.clear();
     }
 
-    fn handle_key(key: u32, state: &mut SharedState) -> HookAction {
+    fn handle_key(key: u32, state_arc: &Arc<Mutex<SharedState>>) -> HookAction {
+        let mut state = state_arc.lock().unwrap();
+
         match key {
             KEY_X => {
                 println!("Captured sequence: Alt+A -> X. Exiting...");
@@ -69,42 +71,48 @@ impl KeypressHandler {
                 );
 
                 state.waiting_for_next_key = false;
-                Self::send_toggles(state);
+                Self::send_toggles(&mut state);
 
                 Suppress
             }
         }
     }
+
+    fn handle_leader_key(state_arc: &Arc<Mutex<SharedState>>) -> HookAction {
+        let mut state = state_arc.lock().unwrap();
+        state.waiting_for_next_key = true;
+        println!("Leader key pressed.");
+
+        let state_clone = Arc::clone(state_arc);
+
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(TIMEOUT_MS));
+            let mut state = state_clone.lock().unwrap();
+
+            if state.waiting_for_next_key && !state.quitting {
+                println!("Timeout. Resetting...");
+                state.waiting_for_next_key = false;
+
+                Self::send_toggles(&mut state);
+            }
+        });
+
+        Suppress
+    }
 }
 
 impl KeypressCallback for KeypressHandler {
     fn handle(&self, key: u32, modifiers: &Modifiers) -> HookAction {
-        let mut state = self.state.lock().unwrap();
-        let leader_pressed = key == LEADER_KEY && modifiers.left_alt;
+        let (quitting, waiting, leader_pressed) = {
+            let state = self.state.lock().unwrap();
+            let leader_pressed = key == LEADER_KEY && modifiers.left_alt;
+            (state.quitting, state.waiting_for_next_key, leader_pressed)
+        };
 
-        match (state.quitting, state.waiting_for_next_key, leader_pressed) {
+        match (quitting, waiting, leader_pressed) {
             (true, _, _) | (false, false, false) => PassOn,
-            (false, true, _) => Self::handle_key(key, &mut state),
-            (false, _, true) => {
-                state.waiting_for_next_key = true;
-                println!("Leader key pressed.");
-
-                let state_clone = Arc::clone(&self.state);
-
-                thread::spawn(move || {
-                    thread::sleep(Duration::from_millis(TIMEOUT_MS));
-                    let mut state = state_clone.lock().unwrap();
-
-                    if state.waiting_for_next_key && !state.quitting {
-                        println!("Timeout. Resetting...");
-                        state.waiting_for_next_key = false;
-
-                        Self::send_toggles(&mut state);
-                    }
-                });
-
-                Suppress
-            }
+            (_, true, _) => Self::handle_key(key, &self.state),
+            (_, _, true) => Self::handle_leader_key(&self.state),
         }
     }
 }
