@@ -52,7 +52,6 @@ impl KeypressHandler {
 
         match key {
             KEY_X => {
-                println!("Captured sequence: Alt+A -> X. Exiting...");
                 state.sender.send(Action::Bye).unwrap();
                 state.quitting = true;
                 KeyboardHookManager::stop_windows_loop();
