@@ -2,7 +2,8 @@ use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use crate::types::{Action, Modifiers};
+use crate::types::Modifier::Alt;
+use crate::types::{Action, Modifier};
 use crate::windows::HookAction::{PassOn, Suppress};
 use crate::windows::{HookAction, KeyboardHookManager, KeypressCallback};
 
@@ -127,11 +128,11 @@ impl KeypressHandler {
 }
 
 impl KeypressCallback for KeypressHandler {
-    fn handle(&self, key: u32, modifiers: &Modifiers) -> HookAction {
+    fn handle(&self, key: u32, modifiers: &[Modifier]) -> HookAction {
         let (quitting, waiting, leader_pressed) = {
             let (mutex, _) = &*self.state;
             let state = mutex.lock().unwrap();
-            let leader_pressed = key == LEADER_KEY && modifiers.left_alt;
+            let leader_pressed = key == LEADER_KEY && modifiers.contains(&Alt);
             (state.quitting, state.waiting_for_next_key, leader_pressed)
         };
 

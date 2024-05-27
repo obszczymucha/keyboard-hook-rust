@@ -1,7 +1,8 @@
 use core::fmt;
 
-pub struct Modifiers {
-    pub left_alt: bool,
+#[derive(PartialEq, Eq)]
+pub enum Modifier {
+    Alt,
 }
 
 pub enum Action {

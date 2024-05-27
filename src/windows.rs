@@ -1,7 +1,7 @@
 use std::ptr;
 use std::sync::mpsc;
 
-use crate::types::{Action, Modifiers};
+use crate::types::{Action, Modifier};
 
 use winapi::shared::minwindef::{LPARAM, LRESULT, WPARAM};
 use winapi::shared::windef::HHOOK;
@@ -24,7 +24,7 @@ pub enum HookAction {
 }
 
 pub trait KeypressCallback {
-    fn handle(&self, key: u32, modifiers: &Modifiers) -> HookAction;
+    fn handle(&self, key: u32, modifiers: &[Modifier]) -> HookAction;
 }
 
 type BoxedKeypressCallback = Box<dyn KeypressCallback>;
@@ -112,8 +112,10 @@ impl KeyboardHookManager {
         }
 
         let p_keyboard: &KBDLLHOOKSTRUCT = &*(l_param as *const KBDLLHOOKSTRUCT);
-        let modifiers = Modifiers {
-            left_alt: (GetKeyState(VK_LMENU) as u16 & KEY_PRESSED_MASK) != 0,
+        let modifiers = if (GetKeyState(VK_LMENU) as u16 & KEY_PRESSED_MASK) != 0 {
+            vec![Modifier::Alt]
+        } else {
+            vec![]
         };
 
         match callback.handle(p_keyboard.vkCode, &modifiers) {
