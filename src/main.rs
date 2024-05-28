@@ -1,5 +1,6 @@
 mod action_handler;
 mod key_handler;
+mod mapping_handler;
 mod types;
 mod windows;
 
@@ -8,6 +9,7 @@ use std::thread;
 
 use action_handler::ActionHandler;
 use key_handler::KeypressHandler;
+use mapping_handler::{define_mappings, MappingHandler};
 use types::Action;
 
 use crate::windows::KeyboardHookManager;
@@ -28,7 +30,10 @@ fn run() -> Result<(), &'static str> {
 
     let producer_handle = thread::spawn(move || {
         let mut manager = KeyboardHookManager::new()?;
-        let handler = Box::new(KeypressHandler::new(tx.clone()));
+        let handler = Box::new(KeypressHandler::new(
+            tx.clone(),
+            MappingHandler::new(define_mappings()),
+        ));
         manager.hook(tx.clone(), handler)
     });
 

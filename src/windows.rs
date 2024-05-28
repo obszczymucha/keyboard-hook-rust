@@ -24,7 +24,7 @@ pub enum HookAction {
 }
 
 pub trait KeypressCallback {
-    fn handle(&self, key: u32, modifiers: &[Modifier]) -> HookAction;
+    fn handle(&mut self, key: u32, modifiers: &[Modifier]) -> HookAction;
 }
 
 type BoxedKeypressCallback = Box<dyn KeypressCallback>;
@@ -103,9 +103,10 @@ impl KeyboardHookManager {
             return 0;
         }
 
-        let manager = &*manager_ptr;
+        let manager = &mut *manager_ptr;
         let hook = manager.hook.expect("No hook found!");
-        let callback = manager.callback.as_ref().expect("No callback found!");
+        let callback: &mut Box<dyn KeypressCallback> =
+            manager.callback.as_mut().expect("No callback found!");
 
         if n_code != 0 || (w_param != WM_KEYDOWN as WPARAM && w_param != WM_SYSKEYDOWN as WPARAM) {
             return CallNextHookEx(hook, n_code, w_param, l_param);
@@ -113,7 +114,7 @@ impl KeyboardHookManager {
 
         let p_keyboard: &KBDLLHOOKSTRUCT = &*(l_param as *const KBDLLHOOKSTRUCT);
         let modifiers = if (GetKeyState(VK_LMENU) as u16 & KEY_PRESSED_MASK) != 0 {
-            vec![Modifier::Alt]
+            vec![Modifier::ModAlt]
         } else {
             vec![]
         };
