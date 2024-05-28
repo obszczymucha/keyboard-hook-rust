@@ -1,14 +1,13 @@
+use crate::mapping_handler::MappingHandler;
+use crate::types::Mapping::*;
+use crate::types::Modifier::*;
+use crate::types::{Action, Modifier};
+use crate::types::{Key, KeyPress};
+use crate::windows::HookAction::{PassOn, Suppress};
+use crate::windows::{HookAction, KeyboardHookManager, KeypressCallback};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
-
-use crate::mapping_handler::Mapping::*;
-
-use crate::mapping_handler::{Key, KeyPress, MappingHandler};
-use crate::types::Modifier::*;
-use crate::types::{Action, Modifier};
-use crate::windows::HookAction::{PassOn, Suppress};
-use crate::windows::{HookAction, KeyboardHookManager, KeypressCallback};
 
 const TIMEOUT_MS: u64 = 650;
 
