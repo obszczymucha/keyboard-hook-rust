@@ -38,7 +38,6 @@ impl MappingHandler {
 
     pub fn handle_key_press(&self, buffer: &[KeyPress], key_press: &KeyPress) -> Option<&Mapping> {
         'mapping_loop: for mapping in &self.mappings {
-            // Iterate only up to the length of buffer + 1 (current key_press included)
             let max_index = buffer.len().min(mapping.len() - 1);
 
             for (i, key_press_in_buffer) in buffer.iter().enumerate().take(max_index) {
@@ -47,12 +46,9 @@ impl MappingHandler {
                 }
             }
 
-            // Check if the current key press matches the next expected key in the mapping sequence
             if let Some(next_mapping) = mapping.get(buffer.len()) {
                 match next_mapping {
                     ActionAfterTimeout(key_presses, _) => {
-                        // We need to check if the current key press matches the first in the `key_presses` if buffer is empty
-                        // or matches the next in sequence after the last matched key in buffer
                         let next_key_index = if buffer.is_empty() {
                             0
                         } else {
@@ -72,5 +68,36 @@ impl MappingHandler {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_return_none_if_the_key_doesnt_match_the_mapping() {
+        // Given
+        let mappings = vec![vec![Timeout(ALT_A)]];
+        let handler = MappingHandler { mappings };
+
+        // When
+        let result = handler.handle_key_press(&[], &KEY_X);
+
+        // Then
+        assert_eq!(result, None)
+    }
+
+    #[test]
+    fn should_recognize_one_key() {
+        // Given
+        let mappings = vec![vec![Timeout(ALT_A)]];
+        let handler = MappingHandler { mappings };
+
+        // When
+        let result = handler.handle_key_press(&[], &ALT_A);
+
+        // Then
+        assert_eq!(result, Some(&Timeout(ALT_A)))
     }
 }

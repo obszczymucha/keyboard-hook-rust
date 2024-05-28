@@ -2,7 +2,7 @@ use crate::types::Modifier::*;
 use core::fmt;
 use std::fmt::Display;
 
-#[derive(PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
 pub enum Modifier {
     NoMod,
     ModAlt,
@@ -17,7 +17,7 @@ impl Display for Modifier {
     }
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 #[allow(dead_code)]
 pub enum Action {
     Hello,
@@ -26,7 +26,7 @@ pub enum Action {
     ChannelToggles(KeyPresses),
 }
 
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct KeyPresses(pub Vec<KeyPress>);
 
 impl Display for KeyPresses {
@@ -50,7 +50,7 @@ impl fmt::Display for Action {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
 pub enum Key {
     Key1,
     Key2,
@@ -94,7 +94,7 @@ impl Key {
 
 use Key::*;
 
-#[derive(PartialEq, Eq, Clone, Hash)]
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
 pub struct KeyPress(Key, Modifier);
 
 impl KeyPress {
@@ -112,7 +112,7 @@ impl Display for KeyPress {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 #[allow(dead_code)]
 pub enum Mapping {
     Timeout(KeyPress),
