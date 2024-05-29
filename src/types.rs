@@ -112,7 +112,7 @@ impl Display for KeyPress {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 #[allow(dead_code)]
 pub enum Mapping {
     Timeout(KeyPress),

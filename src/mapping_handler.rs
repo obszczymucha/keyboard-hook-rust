@@ -74,30 +74,25 @@ impl MappingHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
 
-    #[test]
-    fn should_return_none_if_the_key_doesnt_match_the_mapping() {
+    #[rstest]
+    #[case(&[Timeout(ALT_A)], &[], &KEY_X, None)]
+    #[case(&[Timeout(ALT_A)], &[], &ALT_A, Some(&Timeout(ALT_A)))]
+    fn should_match_keys_to_mappings(
+        #[case] mapping: &[Mapping],
+        #[case] buffer: &[KeyPress],
+        #[case] key: &KeyPress,
+        #[case] expected: Option<&Mapping>,
+    ) {
         // Given
-        let mappings = vec![vec![Timeout(ALT_A)]];
+        let mappings = vec![mapping.to_vec()];
         let handler = MappingHandler { mappings };
 
         // When
-        let result = handler.handle_key_press(&[], &KEY_X);
+        let result = handler.handle_key_press(buffer, key);
 
         // Then
-        assert_eq!(result, None)
-    }
-
-    #[test]
-    fn should_recognize_one_key() {
-        // Given
-        let mappings = vec![vec![Timeout(ALT_A)]];
-        let handler = MappingHandler { mappings };
-
-        // When
-        let result = handler.handle_key_press(&[], &ALT_A);
-
-        // Then
-        assert_eq!(result, Some(&Timeout(ALT_A)))
+        assert_eq!(result, expected)
     }
 }
