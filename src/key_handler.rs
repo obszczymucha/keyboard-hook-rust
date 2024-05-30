@@ -187,6 +187,7 @@ impl KeypressCallback for KeypressHandler {
 
         let mut state = mutex.lock().unwrap();
         state.buffer.clear();
+        state.timeout_action = None;
 
         if state.timeout_running {
             println!("Resetting.");

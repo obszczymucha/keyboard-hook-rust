@@ -222,6 +222,7 @@ mod tests {
     #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
     #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key1)], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
     #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA)], &key!(Key1), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA)], &key!(Key3), None)]
     fn should_match_keys_to_mappings(
         #[case] mappings: Vec<Vec<Mapping>>,
         #[case] buffer: &[KeyPress],
