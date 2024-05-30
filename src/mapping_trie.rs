@@ -1,10 +1,48 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::types::Key::*;
-use crate::types::KeyPressType;
-use crate::types::KeyPresses;
-use crate::types::Modifier::*;
+use crate::types::{Action::*, KEY_A};
 use crate::types::{KeyPress, KeyPressType::Choice, KeyPressType::Single, Mapping};
+use crate::types::{KeyPresses, ALT_A, KEY_X};
+
+macro_rules! t {
+    ($key:expr) => {
+        Mapping::Timeout($key)
+    };
+}
+
+macro_rules! a {
+    ($key:expr, $action:expr) => {
+        Mapping::Action($key, $action)
+    };
+}
+
+macro_rules! aat {
+    ([$($keypresses:expr),* $(,)?], $action:expr) => {
+        Mapping::ActionAfterTimeout(KeyPresses(vec![$($keypresses),*]).choice(), $action)
+    }
+}
+
+macro_rules! key {
+    ($key:expr) => {
+        KeyPress::nomod($key)
+    };
+}
+
+pub fn define_mappings() -> Vec<Vec<Mapping>> {
+    vec![
+        vec![t!(ALT_A), a!(KEY_X, Bye)],
+        vec![t!(ALT_A), t!(KEY_A), a!(KEY_X, Bye)],
+        vec![t!(ALT_A), t!(KEY_A), a!(KEY_A, PrincessKenny)],
+        vec![
+            t!(ALT_A),
+            aat!(
+                [key!(KeyA), key!(Key2), key!(Key3), key!(Key4), key!(Key5)],
+                PrincessKenny
+            ),
+        ],
+    ]
+}
 
 type KeyHashMap = HashMap<KeyPress, MappingTrieNode>;
 
@@ -13,40 +51,30 @@ trait KeyMapGetter {
 }
 
 enum MappingTrieNode {
-    Root {
-        next: KeyHashMap,
-    },
-    OneOff {
-        mapping: Mapping,
-        next: KeyHashMap,
-    },
-    Repeatable {
-        key: KeyPress,
-        mapping: Mapping,
-        next: HashSet<KeyPress>,
-    },
+    Root(KeyHashMap),
+    OneOff(Mapping, KeyHashMap),
+    Repeatable(KeyPress, Mapping, HashSet<KeyPress>),
 }
 
 use MappingTrieNode::*;
 
-struct MappingTrie {
+pub struct MappingTrie {
     keys: MappingTrieNode,
-}
-
-struct DifferentTypeAlreadyMapped {
-    mapping: Mapping,
-    already_mapped_mapping: Mapping,
 }
 
 impl MappingTrie {
     fn all_keys_available(keys: &KeyHashMap, key_presses: &KeyPresses) -> bool {
+        for key_press in &key_presses.0 {
+            if !keys.contains_key(key_press) {
+                return false;
+            }
+        }
+
         true
     }
 
-    fn from_mappings(mappings: Vec<Vec<Mapping>>) -> Self {
-        let mut keys: MappingTrieNode = Root {
-            next: HashMap::new(),
-        };
+    pub fn from_mappings(mappings: Vec<Vec<Mapping>>) -> Self {
+        let mut keys: MappingTrieNode = Root(HashMap::new());
 
         for mapping in mappings {
             let mut node = &mut keys;
@@ -56,13 +84,12 @@ impl MappingTrie {
 
                 match key {
                     Single(key_press) => match node {
-                        Root { next } | OneOff { mapping: _, next } => {
-                            node = next.entry(key_press.clone()).or_insert(OneOff {
-                                mapping: m,
-                                next: HashMap::new(),
-                            });
+                        Root(next) | OneOff(_, next) => {
+                            node = next
+                                .entry(key_press.clone())
+                                .or_insert(OneOff(m, HashMap::new()));
                         }
-                        Repeatable { key, mapping, next } => {
+                        Repeatable(_, mapping, _) => {
                             println!(
                                 "Can't add mapping {} because it conflicts with {}.",
                                 m, mapping
@@ -71,18 +98,16 @@ impl MappingTrie {
                         }
                     },
                     Choice(key_presses) => match node {
-                        Root { next } => {
+                        Root(next) => {
                             if Self::all_keys_available(next, key_presses) {
                                 for key_press in key_presses.clone().0 {
                                     next.insert(
                                         key_press.clone(),
-                                        Repeatable {
-                                            key: key_press,
-                                            mapping: m.clone(),
-                                            next: HashSet::from_iter(
-                                                key_presses.clone().0.into_iter(),
-                                            ),
-                                        },
+                                        Repeatable(
+                                            key_press,
+                                            m.clone(),
+                                            HashSet::from_iter(key_presses.clone().0.into_iter()),
+                                        ),
                                     );
                                 }
                             } else {
@@ -90,11 +115,11 @@ impl MappingTrie {
                                 break;
                             }
                         }
-                        OneOff { mapping, next } => {
+                        OneOff(..) => {
                             println!("Chuj!");
                             break;
                         }
-                        Repeatable { key, mapping, next } => {
+                        Repeatable(..) => {
                             println!("Dupa!");
                             break;
                         }
@@ -113,14 +138,14 @@ impl MappingTrie {
             let key = key_press;
 
             match keys {
-                Root { next } | OneOff { mapping: _, next } => {
+                Root(next) | OneOff(_, next) => {
                     if next.contains_key(key) {
                         keys = &next.get(key).unwrap();
                     } else {
                         return None;
                     }
                 }
-                Repeatable { key, mapping, next } => {
+                Repeatable(key, _, next) => {
                     if !next.contains(key) {
                         return None;
                     }
@@ -129,23 +154,24 @@ impl MappingTrie {
         }
 
         match keys {
-            Root { next } | OneOff { mapping: _, next } => {
+            Root(next) | OneOff(_, next) => {
                 if next.contains_key(key) {
                     let keys = next.get(key).unwrap();
+
                     match keys {
-                        Root { next } => return None,
-                        OneOff { mapping, next } => return Some(mapping),
-                        Repeatable { key, mapping, next } => return Some(mapping),
+                        Root(_) => None,
+                        OneOff(mapping, _) => Some(mapping),
+                        Repeatable(_, mapping, _) => Some(mapping),
                     }
                 } else {
-                    return None;
+                    None
                 }
             }
-            Repeatable { key, mapping, next } => {
+            Repeatable(key, mapping, next) => {
                 if !next.contains(key) {
-                    return None;
+                    None
                 } else {
-                    return Some(mapping);
+                    Some(mapping)
                 }
             }
         }
@@ -155,43 +181,14 @@ impl MappingTrie {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Action::*;
-    use crate::types::KeyPress as KP;
-    use crate::types::KeyPresses as KPS;
-    use crate::types::Mapping::ActionAfterTimeout as AAT;
-    use crate::types::Mapping::ActionBeforeTimeout as ABT;
-    use crate::types::{KeyPresses, Mapping::*, KEY_1, KEY_2};
-    use crate::types::{ALT_A, KEY_A, KEY_X};
+    use crate::types::ALT_A;
+    use crate::types::{KEY_1, KEY_2};
     use rstest::rstest;
-
-    macro_rules! t {
-        ($key:expr) => {
-            Mapping::Timeout($key)
-        };
-    }
-
-    macro_rules! a {
-        ($key:expr, $action:expr) => {
-            Mapping::Action($key, $action)
-        };
-    }
-
-    macro_rules! aat {
-        ([$($keypresses:expr),* $(,)?], $action:expr) => {
-            Mapping::ActionAfterTimeout(KeyPresses(vec![$($keypresses),*]).choice(), $action)
-        }
-    }
 
     macro_rules! abt {
         ([$($keypresses:expr),* $(,)?], $action:expr) => {
             Mapping::ActionBeforeTimeout(KeyPresses(vec![$($keypresses),*]).choice(), $action)
         }
-    }
-
-    macro_rules! key {
-        ($key:expr) => {
-            KeyPress::nomod($key)
-        };
     }
 
     macro_rules! alt {
@@ -210,14 +207,14 @@ mod tests {
     #[case(&[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)], &[alt!(KeyA), key!(Key1)], &key!(Key2), Some(a!(KEY_2, Bye)))]
     #[case(&[aat!([key!(Key1)], Bye)], &[], &key!(Key1), Some(aat!([key!(Key1)], Bye)))]
     #[case(&[aat!([key!(Key1)], Bye)], &[key!(Key1)], &key!(Key1), Some(aat!([key!(Key1)], Bye)))]
+    #[case(&[aat!([key!(Key1), key!(Key2)], Bye)], &[], &key!(Key1), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(&[aat!([key!(Key1), key!(Key2)], Bye)], &[], &key!(Key2), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
     #[case(&[aat!([key!(Key1), key!(Key2)], Bye)], &[key!(Key1)], &key!(Key2), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(&[abt!([alt!(KeyA)], Bye)], &[], &alt!(KeyA), Some(abt!([alt!(KeyA)], Bye)))]
-    // #[case(&[ActionAfterTimeout(KPS(vec![KEY_1, KEY_2]), Bye)], &[], &KEY_1, Some(ActionAfterTimeout(KPS(vec![KEY_1, KEY_2]), Bye)))]
-    // #[case(&[ActionAfterTimeout(KPS(vec![KEY_1, KEY_2]), Bye)], &[KEY_1], &KEY_2, Some(ActionAfterTimeout(KPS(vec![KEY_1, KEY_2]), Bye)))]
-    // #[case(&[Timeout(ALT_A)], &[ALT_A], &ALT_A, None)]
-    // #[case(&[Timeout(ALT_A), Timeout(KEY_A)], &[ALT_A], &ALT_A, None)]
-    // #[case(&[Timeout(ALT_A), Timeout(KEY_A)], &[ALT_A], &KEY_A, Some(Timeout(KEY_A)))]
-    // #[case(&[Timeout(ALT_A), Timeout(KEY_A)], &[ALT_A, KEY_A], &KEY_A, None)]
+    #[case(&[abt!([key!(Key1)], Bye)], &[], &key!(Key1), Some(abt!([key!(Key1)], Bye)))]
+    #[case(&[abt!([key!(Key1)], Bye)], &[key!(Key1)], &key!(Key1), Some(abt!([key!(Key1)], Bye)))]
+    #[case(&[abt!([key!(Key1), key!(Key2)], Bye)], &[], &key!(Key1), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(&[abt!([key!(Key1), key!(Key2)], Bye)], &[], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(&[abt!([key!(Key1), key!(Key2)], Bye)], &[key!(Key1)], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
     fn should_match_keys_to_mappings(
         #[case] mapping: &[Mapping],
         #[case] buffer: &[KeyPress],

@@ -114,12 +114,9 @@ impl KeyPress {
         Self(key, NoMod)
     }
 
+    #[allow(unused)]
     pub fn alt(key: Key) -> Self {
         Self(key, ModAlt)
-    }
-
-    pub fn single(&self) -> KeyPressType {
-        KeyPressType::Single(self.clone())
     }
 }
 
@@ -158,13 +155,6 @@ pub enum Mapping {
 }
 
 impl Mapping {
-    pub fn matches_key(&self, key_press: &KeyPress) -> bool {
-        match self.get_key() {
-            Single(key) => key == key_press,
-            Choice(keys) => keys.0.contains(key_press),
-        }
-    }
-
     pub fn get_key(&self) -> &KeyPressType {
         match self {
             Timeout(key) => key,
@@ -192,10 +182,15 @@ impl Display for Mapping {
 
 use Mapping::*;
 
+#[allow(unused)]
 pub const KEY_1: KeyPressType = Single(KeyPress(Key1, NoMod));
+#[allow(unused)]
 pub const KEY_2: KeyPressType = Single(KeyPress(Key2, NoMod));
+#[allow(unused)]
 pub const KEY_3: KeyPressType = Single(KeyPress(Key3, NoMod));
+#[allow(unused)]
 pub const KEY_4: KeyPressType = Single(KeyPress(Key4, NoMod));
+#[allow(unused)]
 pub const KEY_5: KeyPressType = Single(KeyPress(Key5, NoMod));
 pub const KEY_A: KeyPressType = Single(KeyPress(KeyA, NoMod));
 pub const KEY_X: KeyPressType = Single(KeyPress(KeyX, NoMod));

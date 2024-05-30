@@ -1,4 +1,4 @@
-use crate::mapping_handler::MappingHandler;
+use crate::mapping_trie::MappingTrie;
 use crate::types::Mapping::*;
 use crate::types::Modifier::*;
 use crate::types::{Action, Modifier};
@@ -26,11 +26,11 @@ struct SharedState {
 /// otherwise we'll let other hooks handle it (PassOn).
 pub struct KeypressHandler {
     state: Arc<(Mutex<SharedState>, Condvar)>,
-    mapping_handler: MappingHandler,
+    mapping_trie: MappingTrie,
 }
 
 impl KeypressHandler {
-    pub fn new(sender: mpsc::Sender<Action>, mapping_handler: MappingHandler) -> KeypressHandler {
+    pub fn new(sender: mpsc::Sender<Action>, mapping_trie: MappingTrie) -> KeypressHandler {
         KeypressHandler {
             state: Arc::new((
                 Mutex::new(SharedState {
@@ -44,7 +44,7 @@ impl KeypressHandler {
                 }),
                 Condvar::new(),
             )),
-            mapping_handler,
+            mapping_trie,
         }
     }
 
@@ -123,8 +123,7 @@ impl KeypressCallback for KeypressHandler {
         let mapping = {
             let state = mutex.lock().unwrap();
             let keypresses = &state.buffer;
-            self.mapping_handler
-                .handle_key_press(keypresses, &key_press)
+            self.mapping_trie.find_mapping(keypresses, &key_press)
         };
 
         if let Some(mapping) = mapping {
