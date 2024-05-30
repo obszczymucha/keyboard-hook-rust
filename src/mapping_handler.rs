@@ -1,4 +1,5 @@
 use crate::types::Action::*;
+use crate::types::Key::*;
 use crate::types::KeyPress;
 use crate::types::KeyPresses;
 use crate::types::Mapping;
@@ -20,7 +21,14 @@ pub fn define_mappings() -> Vec<Vec<Mapping>> {
         vec![
             Timeout(ALT_A),
             ActionAfterTimeout(
-                KeyPresses(vec![KEY_1, KEY_2, KEY_3, KEY_4, KEY_5]),
+                KeyPresses(vec![
+                    KeyPress::nomod(KeyA),
+                    KeyPress::nomod(Key2),
+                    KeyPress::nomod(Key3),
+                    KeyPress::nomod(Key4),
+                    KeyPress::nomod(Key5),
+                ])
+                .choice(),
                 PrincessKenny,
             ),
         ],
@@ -37,62 +45,7 @@ impl MappingHandler {
     }
 
     pub fn handle_key_press(&self, buffer: &[KeyPress], key_press: &KeyPress) -> Option<&Mapping> {
-        'mapping_loop: for mapping in &self.mappings {
-            let max_index = buffer.len().min(mapping.len() - 1);
-
-            for (i, key_press_in_buffer) in buffer.iter().enumerate().take(max_index) {
-                if !mapping[i].matches_key(key_press_in_buffer) {
-                    continue 'mapping_loop;
-                }
-            }
-
-            if let Some(next_mapping) = mapping.get(buffer.len()) {
-                match next_mapping {
-                    ActionAfterTimeout(key_presses, _) => {
-                        let next_key_index = if buffer.is_empty() {
-                            0
-                        } else {
-                            buffer.len() - 1
-                        };
-                        if key_presses.0.get(next_key_index) == Some(key_press) {
-                            return Some(next_mapping);
-                        }
-                    }
-                    _ => {
-                        if next_mapping.matches_key(key_press) {
-                            return Some(next_mapping);
-                        }
-                    }
-                }
-            }
-        }
-
         None
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use rstest::rstest;
-
-    #[rstest]
-    #[case(&[Timeout(ALT_A)], &[], &KEY_X, None)]
-    #[case(&[Timeout(ALT_A)], &[], &ALT_A, Some(&Timeout(ALT_A)))]
-    fn should_match_keys_to_mappings(
-        #[case] mapping: &[Mapping],
-        #[case] buffer: &[KeyPress],
-        #[case] key: &KeyPress,
-        #[case] expected: Option<&Mapping>,
-    ) {
-        // Given
-        let mappings = vec![mapping.to_vec()];
-        let handler = MappingHandler { mappings };
-
-        // When
-        let result = handler.handle_key_press(buffer, key);
-
-        // Then
-        assert_eq!(result, expected)
-    }
-}

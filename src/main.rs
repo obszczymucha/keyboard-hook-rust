@@ -3,6 +3,7 @@ mod key_handler;
 mod mapping_handler;
 mod types;
 mod windows;
+mod mapping_trie;
 
 use std::sync::mpsc;
 use std::thread;

@@ -26,15 +26,23 @@ pub enum Action {
     ChannelToggles(KeyPresses),
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct KeyPresses(pub Vec<KeyPress>);
+
+impl KeyPresses {
+    pub fn choice(&self) -> KeyPressType {
+        KeyPressType::Choice(self.clone())
+    }
+}
 
 impl Display for KeyPresses {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut result = String::new();
-        for key_press in &self.0 {
-            result.push_str(&format!("{}", key_press));
-        }
+        let result = self
+            .0
+            .iter()
+            .map(|item| item.to_string())
+            .collect::<Vec<_>>()
+            .join(" | ");
         write!(f, "{}", result)
     }
 }
@@ -101,6 +109,18 @@ impl KeyPress {
     pub fn new(key: Key, modifier: Modifier) -> Self {
         Self(key, modifier)
     }
+
+    pub fn nomod(key: Key) -> Self {
+        Self(key, NoMod)
+    }
+
+    pub fn alt(key: Key) -> Self {
+        Self(key, ModAlt)
+    }
+
+    pub fn single(&self) -> KeyPressType {
+        KeyPressType::Single(self.clone())
+    }
 }
 
 impl Display for KeyPress {
@@ -112,22 +132,45 @@ impl Display for KeyPress {
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub enum KeyPressType {
+    Single(KeyPress),
+    Choice(KeyPresses),
+}
+
+impl Display for KeyPressType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Single(key) => write!(f, "{}", key),
+            Choice(keys) => write!(f, "{}", keys),
+        }
+    }
+}
+use KeyPressType::*;
+
 #[derive(PartialEq, Eq, Debug, Clone)]
 #[allow(dead_code)]
 pub enum Mapping {
-    Timeout(KeyPress),
-    Action(KeyPress, Action),
-    ActionBeforeTimeout(KeyPress, Action),
-    ActionAfterTimeout(KeyPresses, Action),
+    Timeout(KeyPressType),
+    Action(KeyPressType, Action),
+    ActionBeforeTimeout(KeyPressType, Action),
+    ActionAfterTimeout(KeyPressType, Action),
 }
 
 impl Mapping {
     pub fn matches_key(&self, key_press: &KeyPress) -> bool {
+        match self.get_key() {
+            Single(key) => key == key_press,
+            Choice(keys) => keys.0.contains(key_press),
+        }
+    }
+
+    pub fn get_key(&self) -> &KeyPressType {
         match self {
-            Timeout(key) => key == key_press,
-            Action(key, _) => key == key_press,
-            ActionBeforeTimeout(key, _) => key == key_press,
-            ActionAfterTimeout(key_presses, _) => key_presses.0.contains(key_press),
+            Timeout(key) => key,
+            Action(key, _) => key,
+            ActionBeforeTimeout(key, _) => key,
+            ActionAfterTimeout(key, _) => key,
         }
     }
 }
@@ -149,11 +192,11 @@ impl Display for Mapping {
 
 use Mapping::*;
 
-pub const KEY_1: KeyPress = KeyPress(Key1, NoMod);
-pub const KEY_2: KeyPress = KeyPress(Key2, NoMod);
-pub const KEY_3: KeyPress = KeyPress(Key3, NoMod);
-pub const KEY_4: KeyPress = KeyPress(Key4, NoMod);
-pub const KEY_5: KeyPress = KeyPress(Key5, NoMod);
-pub const KEY_A: KeyPress = KeyPress(KeyA, NoMod);
-pub const KEY_X: KeyPress = KeyPress(KeyX, NoMod);
-pub const ALT_A: KeyPress = KeyPress(KeyA, ModAlt);
+pub const KEY_1: KeyPressType = Single(KeyPress(Key1, NoMod));
+pub const KEY_2: KeyPressType = Single(KeyPress(Key2, NoMod));
+pub const KEY_3: KeyPressType = Single(KeyPress(Key3, NoMod));
+pub const KEY_4: KeyPressType = Single(KeyPress(Key4, NoMod));
+pub const KEY_5: KeyPressType = Single(KeyPress(Key5, NoMod));
+pub const KEY_A: KeyPressType = Single(KeyPress(KeyA, NoMod));
+pub const KEY_X: KeyPressType = Single(KeyPress(KeyX, NoMod));
+pub const ALT_A: KeyPressType = Single(KeyPress(KeyA, ModAlt));
