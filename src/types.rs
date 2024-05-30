@@ -192,6 +192,7 @@ pub const KEY_3: KeyPressType = Single(KeyPress(Key3, NoMod));
 pub const KEY_4: KeyPressType = Single(KeyPress(Key4, NoMod));
 #[allow(unused)]
 pub const KEY_5: KeyPressType = Single(KeyPress(Key5, NoMod));
+#[allow(unused)]
 pub const KEY_A: KeyPressType = Single(KeyPress(KeyA, NoMod));
 pub const KEY_X: KeyPressType = Single(KeyPress(KeyX, NoMod));
 pub const ALT_A: KeyPressType = Single(KeyPress(KeyA, ModAlt));

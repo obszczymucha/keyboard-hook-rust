@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::types::Action::*;
 use crate::types::Key::*;
-use crate::types::{Action::*, KEY_A};
 use crate::types::{KeyPress, KeyPressType::Choice, KeyPressType::Single, Mapping};
 use crate::types::{KeyPresses, ALT_A, KEY_X};
 
@@ -32,12 +32,12 @@ macro_rules! key {
 pub fn define_mappings() -> Vec<Vec<Mapping>> {
     vec![
         vec![t!(ALT_A), a!(KEY_X, Bye)],
-        vec![t!(ALT_A), t!(KEY_A), a!(KEY_X, Bye)],
-        vec![t!(ALT_A), t!(KEY_A), a!(KEY_A, PrincessKenny)],
+        // vec![t!(ALT_A), t!(KEY_A), a!(KEY_X, Bye)],
+        // vec![t!(ALT_A), t!(KEY_A), a!(KEY_A, PrincessKenny)],
         vec![
             t!(ALT_A),
             aat!(
-                [key!(KeyA), key!(Key2), key!(Key3), key!(Key4), key!(Key5)],
+                [key!(Key1), key!(Key2), key!(Key3), key!(Key4), key!(Key5)],
                 PrincessKenny
             ),
         ],
@@ -65,7 +65,7 @@ pub struct MappingTrie {
 impl MappingTrie {
     fn all_keys_available(keys: &KeyHashMap, key_presses: &KeyPresses) -> bool {
         for key_press in &key_presses.0 {
-            if !keys.contains_key(key_press) {
+            if keys.contains_key(key_press) {
                 return false;
             }
         }
@@ -98,7 +98,7 @@ impl MappingTrie {
                         }
                     },
                     Choice(key_presses) => match node {
-                        Root(next) => {
+                        Root(next) | OneOff(_, next) => {
                             if Self::all_keys_available(next, key_presses) {
                                 for key_press in key_presses.clone().0 {
                                     next.insert(
@@ -114,10 +114,6 @@ impl MappingTrie {
                                 println!("Not all keys are available!");
                                 break;
                             }
-                        }
-                        OneOff(..) => {
-                            println!("Chuj!");
-                            break;
                         }
                         Repeatable(..) => {
                             println!("Dupa!");
@@ -197,32 +193,42 @@ mod tests {
         };
     }
 
+    macro_rules! m {
+        ( [ $( [ $( $x:expr ),* $(,)? ] ),* $(,)? ] ) => {
+            vec![
+                $(
+                    vec![$($x),*]
+                ),*
+            ]
+        }
+    }
+
     #[rstest]
-    #[case(&[t!(ALT_A)], &[], &key!(KeyX), None)]
-    #[case(&[t!(ALT_A)], &[], &alt!(KeyA), Some(t!(ALT_A)))]
-    #[case(&[a!(ALT_A, Bye)], &[], &alt!(KeyA), Some(a!(ALT_A, Bye)))]
-    #[case(&[t!(ALT_A), t!(KEY_1)], &[alt!(KeyA)], &key!(Key1), Some(t!(KEY_1)))]
-    #[case(&[t!(ALT_A), t!(KEY_1)], &[alt!(KeyA)], &key!(Key2), None)]
-    #[case(&[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)], &[alt!(KeyA), key!(Key2)], &key!(Key2), None)]
-    #[case(&[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)], &[alt!(KeyA), key!(Key1)], &key!(Key2), Some(a!(KEY_2, Bye)))]
-    #[case(&[aat!([key!(Key1)], Bye)], &[], &key!(Key1), Some(aat!([key!(Key1)], Bye)))]
-    #[case(&[aat!([key!(Key1)], Bye)], &[key!(Key1)], &key!(Key1), Some(aat!([key!(Key1)], Bye)))]
-    #[case(&[aat!([key!(Key1), key!(Key2)], Bye)], &[], &key!(Key1), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(&[aat!([key!(Key1), key!(Key2)], Bye)], &[], &key!(Key2), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(&[aat!([key!(Key1), key!(Key2)], Bye)], &[key!(Key1)], &key!(Key2), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(&[abt!([key!(Key1)], Bye)], &[], &key!(Key1), Some(abt!([key!(Key1)], Bye)))]
-    #[case(&[abt!([key!(Key1)], Bye)], &[key!(Key1)], &key!(Key1), Some(abt!([key!(Key1)], Bye)))]
-    #[case(&[abt!([key!(Key1), key!(Key2)], Bye)], &[], &key!(Key1), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(&[abt!([key!(Key1), key!(Key2)], Bye)], &[], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(&[abt!([key!(Key1), key!(Key2)], Bye)], &[key!(Key1)], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[t!(ALT_A)]]), &[], &key!(KeyX), None)]
+    #[case(m!([[t!(ALT_A)]]), &[], &alt!(KeyA), Some(t!(ALT_A)))]
+    #[case(m!([[a!(ALT_A, Bye)]]), &[], &alt!(KeyA), Some(a!(ALT_A, Bye)))]
+    #[case(m!([[t!(ALT_A), t!(KEY_1)]]), &[alt!(KeyA)], &key!(Key1), Some(t!(KEY_1)))]
+    #[case(m!([[t!(ALT_A), t!(KEY_1)]]), &[alt!(KeyA)], &key!(Key2), None)]
+    #[case(m!([[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)]]), &[alt!(KeyA), key!(Key2)], &key!(Key2), None)]
+    #[case(m!([[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)]]), &[alt!(KeyA), key!(Key1)], &key!(Key2), Some(a!(KEY_2, Bye)))]
+    #[case(m!([[aat!([key!(Key1)], Bye)]]), &[], &key!(Key1), Some(aat!([key!(Key1)], Bye)))]
+    #[case(m!([[aat!([key!(Key1)], Bye)]]), &[key!(Key1)], &key!(Key1), Some(aat!([key!(Key1)], Bye)))]
+    #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[], &key!(Key1), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[], &key!(Key2), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key1)], &key!(Key2), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[abt!([key!(Key1)], Bye)]]), &[], &key!(Key1), Some(abt!([key!(Key1)], Bye)))]
+    #[case(m!([[abt!([key!(Key1)], Bye)]]), &[key!(Key1)], &key!(Key1), Some(abt!([key!(Key1)], Bye)))]
+    #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[], &key!(Key1), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key1)], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA)], &key!(Key1), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
     fn should_match_keys_to_mappings(
-        #[case] mapping: &[Mapping],
+        #[case] mappings: Vec<Vec<Mapping>>,
         #[case] buffer: &[KeyPress],
         #[case] key: &KeyPress,
         #[case] expected: Option<Mapping>,
     ) {
         // Given
-        let mappings = vec![mapping.to_vec()];
         let trie = MappingTrie::from_mappings(mappings);
 
         // When

@@ -132,6 +132,7 @@ impl KeypressCallback for KeypressHandler {
                     println!("{}", mapping);
                     let mut state = mutex.lock().unwrap();
                     state.buffer.push(key_press);
+                    state.timeout_action = None;
 
                     if state.timeout_running {
                         state.timeout_retrigger = true;
@@ -149,6 +150,7 @@ impl KeypressCallback for KeypressHandler {
                     let mut state = mutex.lock().unwrap();
                     state.buffer.push(key_press);
                     state.timeout_cancelled = true;
+                    state.timeout_action = None;
                     let _ = state.sender.send(action.clone());
 
                     if Action::Bye == *action {
@@ -163,10 +165,11 @@ impl KeypressCallback for KeypressHandler {
                     return Suppress;
                 }
                 ActionBeforeTimeout(_, _) => return Suppress,
-                ActionAfterTimeout(_, _) => {
+                ActionAfterTimeout(_, action) => {
                     println!("{}", mapping);
                     let mut state = mutex.lock().unwrap();
                     state.buffer.push(key_press);
+                    state.timeout_action = Some(action.clone());
 
                     if state.timeout_running {
                         state.timeout_retrigger = true;
