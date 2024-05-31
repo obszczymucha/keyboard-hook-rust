@@ -2,24 +2,45 @@ use std::collections::{HashMap, HashSet};
 
 use crate::types::Action::*;
 use crate::types::Key::*;
+use crate::types::KeyPresses;
+use crate::types::Modifier::ModAlt;
 use crate::types::{KeyPress, KeyPressType::Choice, KeyPressType::Single, Mapping};
-use crate::types::{KeyPresses, ALT_A, KEY_X};
 
 macro_rules! t {
     ($key:expr) => {
-        Mapping::Timeout($key)
+        Mapping::Timeout(Single(KeyPress::nomod($key)))
+    };
+
+    ($key:expr, $modifier:expr) => {
+        Mapping::Timeout(Single(KeyPress::new($key, $modifier)))
+    };
+}
+
+macro_rules! leader {
+    () => {
+        t!(KeyA, ModAlt)
     };
 }
 
 macro_rules! a {
     ($key:expr, $action:expr) => {
-        Mapping::Action($key, $action)
+        Mapping::Action(Single(KeyPress::nomod($key)), $action)
+    };
+
+    ($key:expr, $modifier:expr, $action:expr) => {
+        Mapping::Action(Single(KeyPress::new($key, $modifier)), $action)
     };
 }
 
 macro_rules! aat {
     ([$($keypresses:expr),* $(,)?], $action:expr) => {
         Mapping::ActionAfterTimeout(KeyPresses(vec![$($keypresses),*]).choice(), $action)
+    }
+}
+
+macro_rules! abt {
+    ([$($keypresses:expr),* $(,)?], $action:expr) => {
+        Mapping::ActionBeforeTimeout(KeyPresses(vec![$($keypresses),*]).choice(), $action)
     }
 }
 
@@ -31,16 +52,15 @@ macro_rules! key {
 
 pub fn define_mappings() -> Vec<Vec<Mapping>> {
     vec![
-        vec![t!(ALT_A), a!(KEY_X, Bye)],
-        // vec![t!(ALT_A), t!(KEY_A), a!(KEY_X, Bye)],
-        // vec![t!(ALT_A), t!(KEY_A), a!(KEY_A, PrincessKenny)],
+        vec![leader!(), t!(KeyE), t!(KeyX), t!(KeyI), a!(KeyT, Bye)],
         vec![
-            t!(ALT_A),
+            leader!(),
             aat!(
                 [key!(Key1), key!(Key2), key!(Key3), key!(Key4), key!(Key5)],
-                PrincessKenny
+                ToggleChannels
             ),
         ],
+        vec![leader!(), abt!([key!(KeyJ), key!(KeyK)], Volume)],
     ]
 }
 
@@ -203,15 +223,7 @@ impl MappingTrie {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::ALT_A;
-    use crate::types::{KEY_1, KEY_2};
     use rstest::rstest;
-
-    macro_rules! abt {
-        ([$($keypresses:expr),* $(,)?], $action:expr) => {
-            Mapping::ActionBeforeTimeout(KeyPresses(vec![$($keypresses),*]).choice(), $action)
-        }
-    }
 
     macro_rules! alt {
         ($key:expr) => {
@@ -230,13 +242,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(m!([[t!(ALT_A)]]), &[key!(KeyX)], None)]
-    #[case(m!([[t!(ALT_A)]]), &[alt!(KeyA)], Some(t!(ALT_A)))]
-    #[case(m!([[a!(ALT_A, Bye)]]), &[alt!(KeyA)], Some(a!(ALT_A, Bye)))]
-    #[case(m!([[t!(ALT_A), t!(KEY_1)]]), &[alt!(KeyA), key!(Key1)], Some(t!(KEY_1)))]
-    #[case(m!([[t!(ALT_A), t!(KEY_1)]]), &[key!(Key2)], None)]
-    #[case(m!([[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)]]), &[alt!(KeyA), key!(Key2), key!(Key2)], None)]
-    #[case(m!([[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)]]), &[alt!(KeyA), key!(Key1), key!(Key2)], Some(a!(KEY_2, Bye)))]
+    #[case(m!([[t!(KeyA)]]), &[key!(KeyX)], None)]
+    #[case(m!([[t!(KeyA, ModAlt)]]), &[alt!(KeyA)], Some(t!(KeyA, ModAlt)))]
+    #[case(m!([[a!(KeyA, ModAlt, Bye)]]), &[alt!(KeyA)], Some(a!(KeyA, ModAlt, Bye)))]
+    #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(KeyA), key!(Key1)], Some(t!(Key1)))]
+    #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(Key2)], None)]
+    #[case(m!([[t!(KeyA), t!(Key1), a!(Key2, Bye)]]), &[key!(KeyA), key!(Key2), key!(Key2)], None)]
+    #[case(m!([[t!(KeyA), t!(Key1), a!(Key2, Bye)]]), &[key!(KeyA), key!(Key1), key!(Key2)], Some(a!(Key2, Bye)))]
     #[case(m!([[aat!([key!(Key1)], Bye)]]), &[key!(Key1)], Some(aat!([key!(Key1)], Bye)))]
     #[case(m!([[aat!([key!(Key1)], Bye)]]), &[key!(Key1)], Some(aat!([key!(Key1)], Bye)))]
     #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key1)], Some(aat!([key!(Key1), key!(Key2)], Bye)))]
@@ -247,9 +259,9 @@ mod tests {
     #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key1)], Some(abt!([key!(Key1), key!(Key2)], Bye)))]
     #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key2)], Some(abt!([key!(Key1), key!(Key2)], Bye)))]
     #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key2)], Some(abt!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA), key!(Key1)], Some(aat!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA), key!(Key1), key!(Key3)], None)]
-    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA), key!(Key3)], None)]
+    #[case(m!([[t!(KeyA), a!(KeyX, Bye)], [t!(KeyA), aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(KeyA), key!(Key1)], Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[t!(KeyA), a!(KeyX, Bye)], [t!(KeyA), aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(KeyA), key!(Key1), key!(Key3)], None)]
+    #[case(m!([[t!(KeyA), a!(KeyX, Bye)], [t!(KeyA), aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(KeyA), key!(Key3)], None)]
     fn should_match_keys_to_mappings(
         #[case] mappings: Vec<Vec<Mapping>>,
         #[case] keypresses: &[KeyPress],

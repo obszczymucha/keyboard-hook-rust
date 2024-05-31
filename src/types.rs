@@ -22,8 +22,8 @@ impl Display for Modifier {
 pub enum Action {
     Hello,
     Bye,
-    PrincessKenny,
-    ChannelToggles(KeyPresses),
+    ToggleChannels,
+    Volume,
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
@@ -52,8 +52,8 @@ impl fmt::Display for Action {
         match self {
             Action::Hello => write!(f, "Hello"),
             Action::Bye => write!(f, "Bye"),
-            Action::PrincessKenny => write!(f, "PrincessKenny"),
-            Action::ChannelToggles(toggles) => write!(f, "Toggles: {}", toggles),
+            Action::ToggleChannels => write!(f, "ToggleChannels"),
+            Action::Volume => write!(f, "Volume"),
         }
     }
 }
@@ -66,6 +66,11 @@ pub enum Key {
     Key4,
     Key5,
     KeyA,
+    KeyE,
+    KeyI,
+    KeyJ,
+    KeyK,
+    KeyT,
     KeyX,
     Unmapped(u8),
 }
@@ -79,6 +84,11 @@ impl Display for Key {
             Key4 => write!(f, "4"),
             Key5 => write!(f, "5"),
             KeyA => write!(f, "A"),
+            KeyE => write!(f, "E"),
+            KeyI => write!(f, "I"),
+            KeyJ => write!(f, "J"),
+            KeyK => write!(f, "K"),
+            KeyT => write!(f, "T"),
             KeyX => write!(f, "X"),
             Unmapped(key) => write!(f, "Unmapped({})", key),
         }
@@ -94,6 +104,11 @@ impl Key {
             b'4' => Key4,
             b'5' => Key5,
             b'A' => KeyA,
+            b'E' => KeyE,
+            b'I' => KeyI,
+            b'J' => KeyJ,
+            b'K' => KeyK,
+            b'T' => KeyT,
             b'X' => KeyX,
             _ => Unmapped(key),
         }
@@ -154,6 +169,8 @@ pub enum Mapping {
     ActionAfterTimeout(KeyPressType, Action),
 }
 
+use Mapping::*;
+
 impl Mapping {
     pub fn get_key(&self) -> &KeyPressType {
         match self {
@@ -179,20 +196,3 @@ impl Display for Mapping {
         }
     }
 }
-
-use Mapping::*;
-
-#[allow(unused)]
-pub const KEY_1: KeyPressType = Single(KeyPress(Key1, NoMod));
-#[allow(unused)]
-pub const KEY_2: KeyPressType = Single(KeyPress(Key2, NoMod));
-#[allow(unused)]
-pub const KEY_3: KeyPressType = Single(KeyPress(Key3, NoMod));
-#[allow(unused)]
-pub const KEY_4: KeyPressType = Single(KeyPress(Key4, NoMod));
-#[allow(unused)]
-pub const KEY_5: KeyPressType = Single(KeyPress(Key5, NoMod));
-#[allow(unused)]
-pub const KEY_A: KeyPressType = Single(KeyPress(KeyA, NoMod));
-pub const KEY_X: KeyPressType = Single(KeyPress(KeyX, NoMod));
-pub const ALT_A: KeyPressType = Single(KeyPress(KeyA, ModAlt));

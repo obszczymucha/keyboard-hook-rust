@@ -87,7 +87,6 @@ impl KeypressHandler {
                 let timeout_action = state.timeout_action.clone();
 
                 if let Some(action) = timeout_action {
-                    println!("Sending action: {}", action);
                     state.timeout_action = None;
                     state.sender.send(action.clone()).unwrap();
                 }
@@ -111,7 +110,7 @@ impl KeypressCallback for KeypressHandler {
         };
 
         // We don't care about Alt, Ctrl, Shift, Win alone. We only use these as modifiers.
-        if [91, 160, 162, 164].contains(&key) {
+        if [91, 92, 93, 160, 161, 162, 163, 164, 165].contains(&key) {
             return PassOn;
         }
 
@@ -158,7 +157,23 @@ impl KeypressCallback for KeypressHandler {
 
                     return Suppress;
                 }
-                ActionBeforeTimeout(_, _) => return Suppress,
+                ActionBeforeTimeout(_, ref action) => {
+                    println!("{}", mapping);
+                    let mut state = mutex.lock().unwrap();
+                    state.sender.send(action.clone()).unwrap();
+                    state.timeout_action = None;
+
+                    if state.timeout_running {
+                        state.timeout_retrigger = true;
+                        drop(state);
+                        condvar.notify_one();
+                    } else {
+                        drop(state);
+                        Self::start_timeout(Arc::clone(&self.state));
+                    }
+
+                    return Suppress;
+                }
                 ActionAfterTimeout(_, ref action) => {
                     println!("{}", mapping);
                     let mut state = mutex.lock().unwrap();
