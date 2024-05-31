@@ -60,6 +60,7 @@ use MappingTrieNode::*;
 
 pub struct MappingTrie {
     keys: MappingTrieNode,
+    buffer: Vec<KeyPress>,
 }
 
 impl MappingTrie {
@@ -124,13 +125,16 @@ impl MappingTrie {
             }
         }
 
-        Self { keys }
+        Self {
+            keys,
+            buffer: vec![],
+        }
     }
 
-    pub fn find_mapping(&self, buffer: &[KeyPress], key: &KeyPress) -> Option<&Mapping> {
+    pub fn find_mapping(&mut self, key: &KeyPress) -> Option<Mapping> {
         let mut keys = &self.keys;
 
-        for key_press in buffer {
+        for key_press in &self.buffer {
             let key = key_press;
 
             match keys {
@@ -138,11 +142,13 @@ impl MappingTrie {
                     if next.contains_key(key) {
                         keys = &next.get(key).unwrap();
                     } else {
+                        self.reset();
                         return None;
                     }
                 }
                 Repeatable(key, _, next) => {
                     if !next.contains(key) {
+                        self.reset();
                         return None;
                     }
                 }
@@ -155,22 +161,38 @@ impl MappingTrie {
                     let keys = next.get(key).unwrap();
 
                     match keys {
-                        Root(_) => None,
-                        OneOff(mapping, _) => Some(mapping),
-                        Repeatable(_, mapping, _) => Some(mapping),
+                        Root(_) => {
+                            self.reset();
+                            None
+                        }
+                        OneOff(mapping, _) => {
+                            self.buffer.push(key.clone());
+                            Some(mapping.clone())
+                        }
+                        Repeatable(_, mapping, _) => {
+                            self.buffer.push(key.clone());
+                            Some(mapping.clone())
+                        }
                     }
                 } else {
+                    self.reset();
                     None
                 }
             }
             Repeatable(key, mapping, next) => {
                 if !next.contains(key) {
+                    self.reset();
                     None
                 } else {
-                    Some(mapping)
+                    self.buffer.push(key.clone());
+                    Some(mapping.clone())
                 }
             }
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.buffer.clear();
     }
 }
 
@@ -204,38 +226,41 @@ mod tests {
     }
 
     #[rstest]
-    #[case(m!([[t!(ALT_A)]]), &[], &key!(KeyX), None)]
-    #[case(m!([[t!(ALT_A)]]), &[], &alt!(KeyA), Some(t!(ALT_A)))]
-    #[case(m!([[a!(ALT_A, Bye)]]), &[], &alt!(KeyA), Some(a!(ALT_A, Bye)))]
-    #[case(m!([[t!(ALT_A), t!(KEY_1)]]), &[alt!(KeyA)], &key!(Key1), Some(t!(KEY_1)))]
-    #[case(m!([[t!(ALT_A), t!(KEY_1)]]), &[alt!(KeyA)], &key!(Key2), None)]
-    #[case(m!([[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)]]), &[alt!(KeyA), key!(Key2)], &key!(Key2), None)]
-    #[case(m!([[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)]]), &[alt!(KeyA), key!(Key1)], &key!(Key2), Some(a!(KEY_2, Bye)))]
-    #[case(m!([[aat!([key!(Key1)], Bye)]]), &[], &key!(Key1), Some(aat!([key!(Key1)], Bye)))]
-    #[case(m!([[aat!([key!(Key1)], Bye)]]), &[key!(Key1)], &key!(Key1), Some(aat!([key!(Key1)], Bye)))]
-    #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[], &key!(Key1), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[], &key!(Key2), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key1)], &key!(Key2), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(m!([[abt!([key!(Key1)], Bye)]]), &[], &key!(Key1), Some(abt!([key!(Key1)], Bye)))]
-    #[case(m!([[abt!([key!(Key1)], Bye)]]), &[key!(Key1)], &key!(Key1), Some(abt!([key!(Key1)], Bye)))]
-    #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[], &key!(Key1), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key1)], &key!(Key2), Some(abt!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA)], &key!(Key1), Some(aat!([key!(Key1), key!(Key2)], Bye)))]
-    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA)], &key!(Key3), None)]
+    #[case(m!([[t!(ALT_A)]]), &[key!(KeyX)], None)]
+    #[case(m!([[t!(ALT_A)]]), &[alt!(KeyA)], Some(t!(ALT_A)))]
+    #[case(m!([[a!(ALT_A, Bye)]]), &[alt!(KeyA)], Some(a!(ALT_A, Bye)))]
+    #[case(m!([[t!(ALT_A), t!(KEY_1)]]), &[alt!(KeyA), key!(Key1)], Some(t!(KEY_1)))]
+    #[case(m!([[t!(ALT_A), t!(KEY_1)]]), &[key!(Key2)], None)]
+    #[case(m!([[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)]]), &[alt!(KeyA), key!(Key2), key!(Key2)], None)]
+    #[case(m!([[t!(ALT_A), t!(KEY_1), a!(KEY_2, Bye)]]), &[alt!(KeyA), key!(Key1), key!(Key2)], Some(a!(KEY_2, Bye)))]
+    #[case(m!([[aat!([key!(Key1)], Bye)]]), &[key!(Key1)], Some(aat!([key!(Key1)], Bye)))]
+    #[case(m!([[aat!([key!(Key1)], Bye)]]), &[key!(Key1)], Some(aat!([key!(Key1)], Bye)))]
+    #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key1)], Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key2)], Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key2)], Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[abt!([key!(Key1)], Bye)]]), &[key!(Key1)], Some(abt!([key!(Key1)], Bye)))]
+    #[case(m!([[abt!([key!(Key1)], Bye)]]), &[key!(Key1)], Some(abt!([key!(Key1)], Bye)))]
+    #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key1)], Some(abt!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key2)], Some(abt!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[abt!([key!(Key1), key!(Key2)], Bye)]]), &[key!(Key2)], Some(abt!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA), key!(Key1)], Some(aat!([key!(Key1), key!(Key2)], Bye)))]
+    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA), key!(Key1), key!(Key3)], None)]
+    #[case(m!([[t!(ALT_A), a!(KEY_X, Bye)], [t!(ALT_A), aat!([key!(Key1), key!(Key2)], Bye)]]), &[alt!(KeyA), key!(Key3)], None)]
     fn should_match_keys_to_mappings(
         #[case] mappings: Vec<Vec<Mapping>>,
-        #[case] buffer: &[KeyPress],
-        #[case] key: &KeyPress,
+        #[case] keypresses: &[KeyPress],
         #[case] expected: Option<Mapping>,
     ) {
         // Given
-        let trie = MappingTrie::from_mappings(mappings);
+        let mut trie = MappingTrie::from_mappings(mappings);
+        let mut result = None;
 
         // When
-        let result = trie.find_mapping(buffer, key);
+        for key in keypresses {
+            result = trie.find_mapping(key);
+        }
 
         // Then
-        assert_eq!(result, expected.as_ref())
+        assert_eq!(result, expected)
     }
 }

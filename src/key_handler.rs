@@ -18,7 +18,7 @@ struct SharedState {
     timeout_retrigger: bool,
     timeout_running: bool,
     timeout_action: Option<Action>,
-    buffer: Vec<KeyPress>,
+    mapping_trie: MappingTrie,
 }
 
 /// KeypressHandler should determine if we can handle the key press by determining the action. If
@@ -26,7 +26,6 @@ struct SharedState {
 /// otherwise we'll let other hooks handle it (PassOn).
 pub struct KeypressHandler {
     state: Arc<(Mutex<SharedState>, Condvar)>,
-    mapping_trie: MappingTrie,
 }
 
 impl KeypressHandler {
@@ -40,11 +39,10 @@ impl KeypressHandler {
                     timeout_retrigger: false,
                     timeout_running: false,
                     timeout_action: None,
-                    buffer: vec![],
+                    mapping_trie,
                 }),
                 Condvar::new(),
             )),
-            mapping_trie,
         }
     }
 
@@ -85,6 +83,7 @@ impl KeypressHandler {
 
             if timeout_result.timed_out() && !state.timeout_retrigger && !state.timeout_cancelled {
                 println!("Timeout!");
+                state.mapping_trie.reset();
                 let timeout_action = state.timeout_action.clone();
 
                 if let Some(action) = timeout_action {
@@ -93,11 +92,9 @@ impl KeypressHandler {
                     state.sender.send(action.clone()).unwrap();
                 }
 
-                state.buffer.clear();
                 state.timeout_running = false;
                 break;
             } else if state.timeout_cancelled {
-                state.buffer.clear();
                 state.timeout_running = false;
                 break;
             }
@@ -121,9 +118,9 @@ impl KeypressCallback for KeypressHandler {
         let key_press = KeyPress::new(Key::from_u8(key as u8), modifier);
         let (mutex, condvar) = &*self.state;
         let mapping = {
-            let state = mutex.lock().unwrap();
-            let keypresses = &state.buffer;
-            self.mapping_trie.find_mapping(keypresses, &key_press)
+            let mut state = mutex.lock().unwrap();
+            // let keypresses = &state.buffer;
+            state.mapping_trie.find_mapping(&key_press)
         };
 
         if let Some(mapping) = mapping {
@@ -131,7 +128,6 @@ impl KeypressCallback for KeypressHandler {
                 Timeout(_) => {
                     println!("{}", mapping);
                     let mut state = mutex.lock().unwrap();
-                    state.buffer.push(key_press);
                     state.timeout_action = None;
 
                     if state.timeout_running {
@@ -145,10 +141,9 @@ impl KeypressCallback for KeypressHandler {
 
                     return Suppress;
                 }
-                Action(_, action) => {
+                Action(_, ref action) => {
                     println!("{}", mapping);
                     let mut state = mutex.lock().unwrap();
-                    state.buffer.push(key_press);
                     state.timeout_cancelled = true;
                     state.timeout_action = None;
                     let _ = state.sender.send(action.clone());
@@ -159,16 +154,14 @@ impl KeypressCallback for KeypressHandler {
                     }
 
                     condvar.notify_one();
-                    state.buffer.clear();
                     drop(state);
 
                     return Suppress;
                 }
                 ActionBeforeTimeout(_, _) => return Suppress,
-                ActionAfterTimeout(_, action) => {
+                ActionAfterTimeout(_, ref action) => {
                     println!("{}", mapping);
                     let mut state = mutex.lock().unwrap();
-                    state.buffer.push(key_press);
                     state.timeout_action = Some(action.clone());
 
                     if state.timeout_running {
@@ -186,7 +179,6 @@ impl KeypressCallback for KeypressHandler {
         }
 
         let mut state = mutex.lock().unwrap();
-        state.buffer.clear();
         state.timeout_action = None;
 
         if state.timeout_running {
