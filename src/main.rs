@@ -32,7 +32,7 @@ fn run() -> Result<(), &'static str> {
         let mut manager = KeyboardHookManager::new()?;
         let handler = Box::new(KeypressHandler::new(
             tx.clone(),
-            MappingTrie::from_mappings(define_mappings()),
+            MappingTrie::from_mappings(&define_mappings()),
         ));
         manager.hook(tx.clone(), handler)
     });

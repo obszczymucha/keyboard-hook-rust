@@ -66,15 +66,11 @@ pub fn define_mappings() -> Vec<Vec<Mapping>> {
 
 type KeyHashMap = HashMap<KeyPress, MappingTrieNode>;
 
-trait KeyMapGetter {
-    fn get_next_mapping(&self, key: &KeyPress) -> &MappingTrieNode;
-}
-
 #[derive(Debug)]
 enum MappingTrieNode {
     Root(KeyHashMap),
     OneOff(Mapping, KeyHashMap),
-    Repeatable(KeyPress, Mapping, HashSet<KeyPress>),
+    Repeatable(Mapping, HashSet<KeyPress>),
 }
 
 use MappingTrieNode::*;
@@ -95,7 +91,7 @@ impl MappingTrie {
         true
     }
 
-    pub fn from_mappings(mappings: Vec<Vec<Mapping>>) -> Self {
+    pub fn from_mappings(mappings: &Vec<Vec<Mapping>>) -> Self {
         let mut keys: MappingTrieNode = Root(HashMap::new());
 
         for mapping in mappings {
@@ -106,19 +102,14 @@ impl MappingTrie {
 
                 match key {
                     Single(key_press) => match node {
-                        Root(next) => {
+                        Root(next) | OneOff(_, next) => {
                             node = next
                                 .entry(key_press.clone())
-                                .or_insert(OneOff(m, HashMap::new()));
+                                .or_insert(OneOff(m.clone(), HashMap::new()));
                         }
-                        OneOff(_, next) => {
-                            node = next
-                                .entry(key_press.clone())
-                                .or_insert(OneOff(m, HashMap::new()));
-                        }
-                        Repeatable(_, mapping, _) => {
+                        Repeatable(mapping, _) => {
                             println!(
-                                "Can't add mapping {} because it conflicts with {}.",
+                                "Repeatable mapping conflicts with another mapping. Mapping: {}, conflicting mapping: {}",
                                 m, mapping
                             );
                             break;
@@ -129,19 +120,17 @@ impl MappingTrie {
                             if Self::all_keys_available(next, key_presses) {
                                 for key_press in key_presses.clone().0 {
                                     let set = HashSet::from_iter(key_presses.clone().0.into_iter());
-
-                                    next.insert(
-                                        key_press.clone(),
-                                        Repeatable(key_press, m.clone(), set),
-                                    );
+                                    next.insert(key_press.clone(), Repeatable(m.clone(), set));
                                 }
                             } else {
-                                println!("Not all keys are available!");
+                                println!("Not all keys are available for mapping: {:?}", mapping);
                                 break;
                             }
                         }
-                        Repeatable(..) => {
-                            println!("Dupa!");
+                        Repeatable(conflicting_mapping, _) => {
+                            println!(
+                                "Repeatable mapping conflicts with another repeatable mapping. Mapping: {}, conflicting mapping: {}",
+                                m, conflicting_mapping);
                             break;
                         }
                     },
@@ -163,14 +152,14 @@ impl MappingTrie {
 
             match keys {
                 Root(next) | OneOff(_, next) => {
-                    if next.contains_key(key) {
-                        keys = &next.get(key).unwrap();
-                    } else {
+                    if !next.contains_key(key) {
                         self.reset();
                         return None;
+                    } else {
+                        keys = &next.get(key).unwrap();
                     }
                 }
-                Repeatable(key, _, next) => {
+                Repeatable(_, next) => {
                     if !next.contains(key) {
                         self.reset();
                         return None;
@@ -180,36 +169,33 @@ impl MappingTrie {
         }
 
         match keys {
-            Root(next) | OneOff(_, next) => {
-                if next.contains_key(key) {
-                    let keys = next.get(key).unwrap();
-
-                    match keys {
-                        Root(_) => {
-                            self.reset();
-                            None
-                        }
-                        OneOff(mapping, _) => {
-                            self.buffer.push(key.clone());
-                            Some(mapping.clone())
-                        }
-                        Repeatable(_, mapping, _) => {
-                            self.buffer.push(key.clone());
-                            Some(mapping.clone())
-                        }
-                    }
-                } else {
+            Root(next) | OneOff(_, next) => match next.get(key) {
+                None => {
                     self.reset();
                     None
                 }
-            }
-            Repeatable(_, mapping, next) => {
-                if !next.contains(key) {
-                    self.reset();
-                    None
-                } else {
+                Some(keys) => match keys {
+                    Root(_) => {
+                        self.reset();
+                        None
+                    }
+                    OneOff(mapping, _) => {
+                        self.buffer.push(key.clone());
+                        Some(mapping.clone())
+                    }
+                    Repeatable(mapping, _) => {
+                        self.buffer.push(key.clone());
+                        Some(mapping.clone())
+                    }
+                },
+            },
+            Repeatable(mapping, next) => {
+                if next.contains(key) {
                     self.buffer.push(key.clone());
                     Some(mapping.clone())
+                } else {
+                    self.reset();
+                    None
                 }
             }
         }
@@ -268,7 +254,7 @@ mod tests {
         #[case] expected: Option<Mapping>,
     ) {
         // Given
-        let mut trie = MappingTrie::from_mappings(mappings);
+        let mut trie = MappingTrie::from_mappings(&mappings);
         let mut result = None;
 
         // When
