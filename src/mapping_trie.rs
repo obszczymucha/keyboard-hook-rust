@@ -50,6 +50,7 @@ trait KeyMapGetter {
     fn get_next_mapping(&self, key: &KeyPress) -> &MappingTrieNode;
 }
 
+#[derive(Debug)]
 enum MappingTrieNode {
     Root(KeyHashMap),
     OneOff(Mapping, KeyHashMap),
@@ -85,7 +86,12 @@ impl MappingTrie {
 
                 match key {
                     Single(key_press) => match node {
-                        Root(next) | OneOff(_, next) => {
+                        Root(next) => {
+                            node = next
+                                .entry(key_press.clone())
+                                .or_insert(OneOff(m, HashMap::new()));
+                        }
+                        OneOff(_, next) => {
                             node = next
                                 .entry(key_press.clone())
                                 .or_insert(OneOff(m, HashMap::new()));
@@ -102,13 +108,11 @@ impl MappingTrie {
                         Root(next) | OneOff(_, next) => {
                             if Self::all_keys_available(next, key_presses) {
                                 for key_press in key_presses.clone().0 {
+                                    let set = HashSet::from_iter(key_presses.clone().0.into_iter());
+
                                     next.insert(
                                         key_press.clone(),
-                                        Repeatable(
-                                            key_press,
-                                            m.clone(),
-                                            HashSet::from_iter(key_presses.clone().0.into_iter()),
-                                        ),
+                                        Repeatable(key_press, m.clone(), set),
                                     );
                                 }
                             } else {
@@ -179,7 +183,7 @@ impl MappingTrie {
                     None
                 }
             }
-            Repeatable(key, mapping, next) => {
+            Repeatable(_, mapping, next) => {
                 if !next.contains(key) {
                     self.reset();
                     None
