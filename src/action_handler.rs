@@ -26,7 +26,7 @@ impl ActionHandler {
                     println!("Keyboard hooked. Press Alt+A -> E -> X -> I -> T to exit.")
                 }
                 Action::Bye => println!("Exiting..."),
-                Action::ToggleChannels => println!("Toggle Channels"),
+                Action::ToggleChannels => println!("ToggleChannels"),
                 Action::Volume => println!("Volume"),
             }
         }
