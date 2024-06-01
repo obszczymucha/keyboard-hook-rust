@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+use std::fmt::Display;
 use std::ptr;
 use std::sync::mpsc;
 
@@ -42,9 +44,9 @@ impl KeyboardHookManager {
         })
     }
 
-    pub fn hook(
+    pub fn hook<T: PartialEq + Eq + Clone + Debug + Display + Sync + Send>(
         &mut self,
-        sender: mpsc::Sender<ActionType>,
+        sender: mpsc::Sender<ActionType<T>>,
         keypress_callback: BoxedKeypressCallback,
     ) -> Result<(), &'static str> {
         unsafe {

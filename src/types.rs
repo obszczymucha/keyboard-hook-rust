@@ -1,5 +1,6 @@
 use crate::types::Modifier::*;
 use core::fmt;
+use std::fmt::Debug;
 use std::fmt::Display;
 
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]
@@ -17,22 +18,13 @@ impl Display for Modifier {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
-#[allow(dead_code)]
-pub enum ActionType {
-    Hello,
-    Bye,
-    ToggleChannels,
-    Volume,
-}
-
-pub struct Action {
-    action_type: ActionType,
+pub struct Action<T> {
+    action_type: T,
     keys: Vec<KeyPress>,
 }
 
-impl Action {
-    fn new(action_type: ActionType, keys: Vec<KeyPress>) -> Self {
+impl<T> Action<T> {
+    fn new(action_type: T, keys: Vec<KeyPress>) -> Self {
         Self { action_type, keys }
     }
 }
@@ -55,17 +47,6 @@ impl Display for KeyPresses {
             .collect::<Vec<_>>()
             .join(" | ");
         write!(f, "{}", result)
-    }
-}
-
-impl fmt::Display for ActionType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ActionType::Hello => write!(f, "Hello"),
-            ActionType::Bye => write!(f, "Bye"),
-            ActionType::ToggleChannels => write!(f, "ToggleChannels"),
-            ActionType::Volume => write!(f, "Volume"),
-        }
     }
 }
 
@@ -242,16 +223,22 @@ use KeyPressType::*;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 #[allow(dead_code)]
-pub enum Mapping {
+pub enum Mapping<T>
+where
+    T: Clone + PartialEq + Eq + Debug + Display + Sync + Send,
+{
     Timeout(KeyPressType),
-    Action(KeyPressType, ActionType),
-    ActionBeforeTimeout(KeyPressType, ActionType),
-    ActionAfterTimeout(KeyPressType, ActionType),
+    Action(KeyPressType, ActionType<T>),
+    ActionBeforeTimeout(KeyPressType, ActionType<T>),
+    ActionAfterTimeout(KeyPressType, ActionType<T>),
 }
 
 use Mapping::*;
 
-impl Mapping {
+impl<T> Mapping<T>
+where
+    T: Clone + PartialEq + Eq + Debug + Display + Sync + Send,
+{
     pub fn get_key(&self) -> &KeyPressType {
         match self {
             Timeout(key) => key,
@@ -262,7 +249,10 @@ impl Mapping {
     }
 }
 
-impl Display for Mapping {
+impl<T> Display for Mapping<T>
+where
+    T: Clone + PartialEq + Eq + Debug + Display + Sync + Send,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Timeout(key) => write!(f, "TimeoutKey: {}", key),
@@ -273,6 +263,30 @@ impl Display for Mapping {
             ActionAfterTimeout(key_presses, action) => {
                 write!(f, "ActionAfterTimeoutKey: {} -> {}", key_presses, action)
             }
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub enum ActionType<T>
+where
+    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync,
+{
+    Hello,
+    User(T),
+    Bye,
+}
+
+impl<T> Display for ActionType<T>
+where
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ActionType::Hello => write!(f, "Hello"),
+            ActionType::User(action) => write!(f, "{}", action),
+            ActionType::Bye => write!(f, "Bye"),
         }
     }
 }

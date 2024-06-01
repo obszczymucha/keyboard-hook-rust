@@ -5,31 +5,45 @@ use crate::types::{ActionType, Modifier};
 use crate::types::{Key, KeyPress};
 use crate::windows::HookAction::{PassOn, Suppress};
 use crate::windows::{HookAction, KeyboardHookManager, KeypressCallback};
+use std::fmt::Debug;
+use std::fmt::Display;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
 const TIMEOUT_MS: u64 = 650;
 
-struct SharedState {
-    sender: mpsc::Sender<ActionType>,
+struct SharedState<T>
+where
+    T: PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+{
+    sender: mpsc::Sender<ActionType<T>>,
     timeout_cancelled: bool,
     quitting: bool,
     timeout_retrigger: bool,
     timeout_running: bool,
-    timeout_action: Option<ActionType>,
-    mapping_trie: MappingTrie,
+    timeout_action: Option<ActionType<T>>,
+    mapping_trie: MappingTrie<T>,
 }
 
 /// KeypressHandler should determine if we can handle the key press by determining the action. If
 /// the key press results in an action, we'll suppress propagating the key press event (Suppress),
 /// otherwise we'll let other hooks handle it (PassOn).
-pub struct KeypressHandler {
-    state: Arc<(Mutex<SharedState>, Condvar)>,
+pub struct KeypressHandler<T>
+where
+    T: PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+{
+    state: Arc<(Mutex<SharedState<T>>, Condvar)>,
 }
 
-impl KeypressHandler {
-    pub fn new(sender: mpsc::Sender<ActionType>, mapping_trie: MappingTrie) -> KeypressHandler {
+impl<T> KeypressHandler<T>
+where
+    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+{
+    pub fn new(
+        sender: mpsc::Sender<ActionType<T>>,
+        mapping_trie: MappingTrie<T>,
+    ) -> KeypressHandler<T> {
         KeypressHandler {
             state: Arc::new((
                 Mutex::new(SharedState {
@@ -46,7 +60,7 @@ impl KeypressHandler {
         }
     }
 
-    fn start_timeout(state_arc: Arc<(Mutex<SharedState>, Condvar)>) {
+    fn start_timeout(state_arc: Arc<(Mutex<SharedState<T>>, Condvar)>) {
         let (mutex, _) = &*state_arc;
         let state = mutex.lock().unwrap();
 
@@ -68,7 +82,7 @@ impl KeypressHandler {
                 .wait_timeout_while(
                     state,
                     Duration::from_millis(TIMEOUT_MS),
-                    |s: &mut SharedState| {
+                    |s: &mut SharedState<T>| {
                         !s.timeout_retrigger && !s.quitting && !s.timeout_cancelled
                     },
                 )
@@ -101,7 +115,10 @@ impl KeypressHandler {
     }
 }
 
-impl KeypressCallback for KeypressHandler {
+impl<T> KeypressCallback for KeypressHandler<T>
+where
+    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+{
     fn handle(&mut self, key: u32, modifiers: &[Modifier]) -> HookAction {
         let modifier = if modifiers.contains(&ModAlt) {
             ModAlt
