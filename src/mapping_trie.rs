@@ -334,7 +334,7 @@ mod tests {
     #[case(m!([[t!(KeyA), a!(KeyX, u!(Princess))], [t!(KeyA), aat!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(KeyA), key!(Key1), key!(Key3)], None)]
     #[case(m!([[t!(KeyA), a!(KeyX, u!(Princess))], [t!(KeyA), aat!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(KeyA), key!(Key3)], None)]
     #[case(m!([[t!(KeyA), tm!([key!(KeyB)]), a!(KeyX, u!(Kenny))]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)], Some(a!(KeyX, u!(Kenny))))]
-    #[case(m!([[t!(KeyA), tm!([key!(KeyB)]), t!(KeyX), tm!([key!(KeyC)]), a!(KeyX, u!(Kenny))]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)], Some(a!(KeyX, u!(Kenny))))]
+    #[case(m!([[t!(KeyA), tm!([key!(KeyB)]), t!(KeyX), tm!([key!(KeyC)]), a!(KeyX, u!(Kenny))]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX), key!(KeyC), key!(KeyC), key!(KeyX)], Some(a!(KeyX, u!(Kenny))))]
     fn should_match_keys_to_mappings(
         #[case] mappings: Vec<Vec<Mapping<TestAction>>>,
         #[case] keypresses: &[KeyPress],
