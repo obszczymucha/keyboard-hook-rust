@@ -19,11 +19,22 @@ impl Display for Modifier {
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[allow(dead_code)]
-pub enum Action {
+pub enum ActionType {
     Hello,
     Bye,
     ToggleChannels,
     Volume,
+}
+
+pub struct Action {
+    action_type: ActionType,
+    keys: Vec<KeyPress>,
+}
+
+impl Action {
+    fn new(action_type: ActionType, keys: Vec<KeyPress>) -> Self {
+        Self { action_type, keys }
+    }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
@@ -47,49 +58,98 @@ impl Display for KeyPresses {
     }
 }
 
-impl fmt::Display for Action {
+impl fmt::Display for ActionType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Action::Hello => write!(f, "Hello"),
-            Action::Bye => write!(f, "Bye"),
-            Action::ToggleChannels => write!(f, "ToggleChannels"),
-            Action::Volume => write!(f, "Volume"),
+            ActionType::Hello => write!(f, "Hello"),
+            ActionType::Bye => write!(f, "Bye"),
+            ActionType::ToggleChannels => write!(f, "ToggleChannels"),
+            ActionType::Volume => write!(f, "Volume"),
         }
     }
 }
 
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]
+#[allow(dead_code)]
 pub enum Key {
+    Key0,
     Key1,
     Key2,
     Key3,
     Key4,
     Key5,
+    Key6,
+    Key7,
+    Key8,
+    Key9,
     KeyA,
+    KeyB,
+    KeyC,
+    KeyD,
     KeyE,
+    KeyF,
+    KeyG,
+    KeyH,
     KeyI,
     KeyJ,
     KeyK,
+    KeyL,
+    KeyM,
+    KeyN,
+    KeyO,
+    KeyP,
+    KeyQ,
+    KeyR,
+    KeyS,
     KeyT,
+    KeyU,
+    KeyV,
+    KeyW,
     KeyX,
+    KeyY,
+    KeyZ,
     Unmapped(u8),
 }
 
 impl Display for Key {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Key0 => write!(f, "0"),
             Key1 => write!(f, "1"),
             Key2 => write!(f, "2"),
             Key3 => write!(f, "3"),
             Key4 => write!(f, "4"),
             Key5 => write!(f, "5"),
+            Key6 => write!(f, "5"),
+            Key7 => write!(f, "5"),
+            Key8 => write!(f, "5"),
+            Key9 => write!(f, "5"),
             KeyA => write!(f, "A"),
+            KeyB => write!(f, "B"),
+            KeyC => write!(f, "C"),
+            KeyD => write!(f, "D"),
             KeyE => write!(f, "E"),
+            KeyF => write!(f, "F"),
+            KeyG => write!(f, "G"),
+            KeyH => write!(f, "H"),
             KeyI => write!(f, "I"),
             KeyJ => write!(f, "J"),
             KeyK => write!(f, "K"),
+            KeyL => write!(f, "L"),
+            KeyM => write!(f, "M"),
+            KeyN => write!(f, "N"),
+            KeyO => write!(f, "O"),
+            KeyP => write!(f, "P"),
+            KeyQ => write!(f, "Q"),
+            KeyR => write!(f, "R"),
+            KeyS => write!(f, "S"),
             KeyT => write!(f, "T"),
+            KeyU => write!(f, "U"),
+            KeyV => write!(f, "V"),
+            KeyW => write!(f, "W"),
             KeyX => write!(f, "X"),
+            KeyY => write!(f, "Y"),
+            KeyZ => write!(f, "Z"),
             Unmapped(key) => write!(f, "Unmapped({})", key),
         }
     }
@@ -98,18 +158,38 @@ impl Display for Key {
 impl Key {
     pub fn from_u8(key: u8) -> Key {
         match key {
+            b'0' => Key0,
             b'1' => Key1,
             b'2' => Key2,
             b'3' => Key3,
             b'4' => Key4,
             b'5' => Key5,
             b'A' => KeyA,
+            b'B' => KeyB,
+            b'C' => KeyC,
+            b'D' => KeyD,
             b'E' => KeyE,
+            b'F' => KeyF,
+            b'G' => KeyG,
+            b'H' => KeyH,
             b'I' => KeyI,
             b'J' => KeyJ,
             b'K' => KeyK,
+            b'L' => KeyL,
+            b'M' => KeyM,
+            b'N' => KeyN,
+            b'O' => KeyO,
+            b'P' => KeyP,
+            b'Q' => KeyQ,
+            b'R' => KeyR,
+            b'S' => KeyS,
             b'T' => KeyT,
+            b'U' => KeyU,
+            b'V' => KeyV,
+            b'W' => KeyW,
             b'X' => KeyX,
+            b'Y' => KeyY,
+            b'Z' => KeyZ,
             _ => Unmapped(key),
         }
     }
@@ -164,9 +244,9 @@ use KeyPressType::*;
 #[allow(dead_code)]
 pub enum Mapping {
     Timeout(KeyPressType),
-    Action(KeyPressType, Action),
-    ActionBeforeTimeout(KeyPressType, Action),
-    ActionAfterTimeout(KeyPressType, Action),
+    Action(KeyPressType, ActionType),
+    ActionBeforeTimeout(KeyPressType, ActionType),
+    ActionAfterTimeout(KeyPressType, ActionType),
 }
 
 use Mapping::*;

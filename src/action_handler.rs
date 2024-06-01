@@ -1,4 +1,4 @@
-use crate::types::{Action, KeyPresses};
+use crate::types::{ActionType, KeyPresses};
 use std::{collections::HashSet, sync::mpsc};
 
 pub struct ActionHandler;
@@ -19,15 +19,15 @@ fn deduplicate(key_presses: &KeyPresses) -> KeyPresses {
 }
 
 impl ActionHandler {
-    pub fn consume(receiver: mpsc::Receiver<Action>) {
+    pub fn consume(receiver: mpsc::Receiver<ActionType>) {
         for action in receiver {
             match action {
-                Action::Hello => {
+                ActionType::Hello => {
                     println!("Keyboard hooked. Press Alt+A -> E -> X -> I -> T to exit.")
                 }
-                Action::Bye => println!("Exiting..."),
-                Action::ToggleChannels => println!("ToggleChannels"),
-                Action::Volume => println!("Volume"),
+                ActionType::Bye => println!("Exiting..."),
+                ActionType::ToggleChannels => println!("ToggleChannels"),
+                ActionType::Volume => println!("Volume"),
             }
         }
     }

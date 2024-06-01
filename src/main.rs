@@ -10,7 +10,7 @@ use std::thread;
 use action_handler::ActionHandler;
 use key_handler::KeypressHandler;
 use mapping_trie::{define_mappings, MappingTrie};
-use types::Action;
+use types::ActionType;
 
 use crate::windows::KeyboardHookManager;
 
@@ -22,7 +22,7 @@ fn main() {
 }
 
 fn run() -> Result<(), &'static str> {
-    let (tx, rx) = mpsc::channel::<Action>();
+    let (tx, rx) = mpsc::channel::<ActionType>();
 
     let consumer_handle = thread::spawn(|| {
         ActionHandler::consume(rx);

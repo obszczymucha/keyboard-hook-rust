@@ -1,7 +1,7 @@
 use crate::mapping_trie::MappingTrie;
 use crate::types::Mapping::*;
 use crate::types::Modifier::*;
-use crate::types::{Action, Modifier};
+use crate::types::{ActionType, Modifier};
 use crate::types::{Key, KeyPress};
 use crate::windows::HookAction::{PassOn, Suppress};
 use crate::windows::{HookAction, KeyboardHookManager, KeypressCallback};
@@ -12,12 +12,12 @@ use std::time::Duration;
 const TIMEOUT_MS: u64 = 650;
 
 struct SharedState {
-    sender: mpsc::Sender<Action>,
+    sender: mpsc::Sender<ActionType>,
     timeout_cancelled: bool,
     quitting: bool,
     timeout_retrigger: bool,
     timeout_running: bool,
-    timeout_action: Option<Action>,
+    timeout_action: Option<ActionType>,
     mapping_trie: MappingTrie,
 }
 
@@ -29,7 +29,7 @@ pub struct KeypressHandler {
 }
 
 impl KeypressHandler {
-    pub fn new(sender: mpsc::Sender<Action>, mapping_trie: MappingTrie) -> KeypressHandler {
+    pub fn new(sender: mpsc::Sender<ActionType>, mapping_trie: MappingTrie) -> KeypressHandler {
         KeypressHandler {
             state: Arc::new((
                 Mutex::new(SharedState {
@@ -145,9 +145,10 @@ impl KeypressCallback for KeypressHandler {
                     let mut state = mutex.lock().unwrap();
                     state.timeout_cancelled = true;
                     state.timeout_action = None;
+                    state.mapping_trie.reset();
                     let _ = state.sender.send(action.clone());
 
-                    if Action::Bye == *action {
+                    if ActionType::Bye == *action {
                         state.quitting = true;
                         KeyboardHookManager::stop_windows_loop();
                     }

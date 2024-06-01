@@ -1,7 +1,7 @@
 use std::ptr;
 use std::sync::mpsc;
 
-use crate::types::{Action, Modifier};
+use crate::types::{ActionType, Modifier};
 
 use winapi::shared::minwindef::{LPARAM, LRESULT, WPARAM};
 use winapi::shared::windef::HHOOK;
@@ -44,7 +44,7 @@ impl KeyboardHookManager {
 
     pub fn hook(
         &mut self,
-        sender: mpsc::Sender<Action>,
+        sender: mpsc::Sender<ActionType>,
         keypress_callback: BoxedKeypressCallback,
     ) -> Result<(), &'static str> {
         unsafe {
@@ -67,7 +67,7 @@ impl KeyboardHookManager {
             }
 
             self.hook = Some(hook);
-            sender.send(Action::Hello).unwrap();
+            sender.send(ActionType::Hello).unwrap();
             Self::start_windows_loop();
             Ok(())
         }

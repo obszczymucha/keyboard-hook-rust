@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::types::Action::*;
+use crate::types::ActionType::*;
 use crate::types::Key::*;
 use crate::types::KeyPresses;
 use crate::types::Modifier::ModAlt;
@@ -13,6 +13,12 @@ macro_rules! t {
 
     ($key:expr, $modifier:expr) => {
         Mapping::Timeout(Single(KeyPress::new($key, $modifier)))
+    };
+}
+
+macro_rules! tm {
+    ([$($keypresses:expr),* $(,)?]) => {
+        Mapping::Timeout(KeyPresses(vec![$($keypresses),*]).choice())
     };
 }
 
@@ -41,7 +47,11 @@ macro_rules! aat {
 macro_rules! abt {
     ([$($keypresses:expr),* $(,)?], $action:expr) => {
         Mapping::ActionBeforeTimeout(KeyPresses(vec![$($keypresses),*]).choice(), $action)
-    }
+    };
+
+    ($key:expr, $action:expr) => {
+        Mapping::ActionBeforeTimeout(Single(KeyPress::nomod($key)), $action)
+    };
 }
 
 macro_rules! key {
@@ -70,13 +80,13 @@ type KeyHashMap = HashMap<KeyPress, MappingTrieNode>;
 enum MappingTrieNode {
     Root(KeyHashMap),
     OneOff(Mapping, KeyHashMap),
-    Repeatable(Mapping, HashSet<KeyPress>),
+    Repeatable(Mapping, HashSet<KeyPress>, KeyHashMap),
 }
 
 use MappingTrieNode::*;
 
 pub struct MappingTrie {
-    keys: MappingTrieNode,
+    root: MappingTrieNode,
     buffer: Vec<KeyPress>,
 }
 
@@ -91,84 +101,98 @@ impl MappingTrie {
         true
     }
 
-    pub fn from_mappings(mappings: &Vec<Vec<Mapping>>) -> Self {
-        let mut keys: MappingTrieNode = Root(HashMap::new());
+    fn map(root: &mut MappingTrieNode, mapping: &Vec<Mapping>, starting_pos: usize) {
+        let mut node = root;
 
-        for mapping in mappings {
-            let mut node = &mut keys;
+        for i in starting_pos..mapping.len() {
+            let m = &mapping[i];
+            let key = m.get_key();
 
-            for m in mapping {
-                let key = m.get_key();
+            match key {
+                Single(key_press) => match node {
+                    Root(next) | OneOff(_, next) => {
+                        node = next
+                            .entry(key_press.clone())
+                            .or_insert(OneOff(m.clone(), HashMap::new()));
+                    }
+                    Repeatable(_, _, next) => {
+                        node = next
+                            .entry(key_press.clone())
+                            .or_insert(OneOff(m.clone(), HashMap::new()));
+                    }
+                },
+                Choice(key_presses) => match node {
+                    Root(next) | OneOff(_, next) => {
+                        if Self::all_keys_available(next, key_presses) {
+                            for key_press in key_presses.clone().0 {
+                                let set = HashSet::from_iter(key_presses.clone().0.into_iter());
+                                let next_node = next
+                                    .entry(key_press.clone())
+                                    .or_insert(Repeatable(m.clone(), set, HashMap::new()));
+                                Self::map(next_node, mapping, i + 1);
+                            }
 
-                match key {
-                    Single(key_press) => match node {
-                        Root(next) | OneOff(_, next) => {
-                            node = next
-                                .entry(key_press.clone())
-                                .or_insert(OneOff(m.clone(), HashMap::new()));
-                        }
-                        Repeatable(mapping, _) => {
-                            println!(
-                                "Repeatable mapping conflicts with another mapping. Mapping: {}, conflicting mapping: {}",
-                                m, mapping
-                            );
+                            break;
+                        } else {
+                            println!("Not all keys are available for mapping: {:?}", mapping);
                             break;
                         }
-                    },
-                    Choice(key_presses) => match node {
-                        Root(next) | OneOff(_, next) => {
-                            if Self::all_keys_available(next, key_presses) {
-                                for key_press in key_presses.clone().0 {
-                                    let set = HashSet::from_iter(key_presses.clone().0.into_iter());
-                                    next.insert(key_press.clone(), Repeatable(m.clone(), set));
-                                }
-                            } else {
-                                println!("Not all keys are available for mapping: {:?}", mapping);
-                                break;
-                            }
-                        }
-                        Repeatable(conflicting_mapping, _) => {
-                            println!(
+                    }
+                    Repeatable(conflicting_mapping, _, _) => {
+                        println!(
                                 "Repeatable mapping conflicts with another repeatable mapping. Mapping: {}, conflicting mapping: {}",
                                 m, conflicting_mapping);
-                            break;
-                        }
-                    },
-                }
+                        break;
+                    }
+                },
             }
+        }
+    }
+    pub fn from_mappings(mappings: &Vec<Vec<Mapping>>) -> Self {
+        let mut root: MappingTrieNode = Root(HashMap::new());
+
+        for mapping in mappings {
+            Self::map(&mut root, mapping, 0);
         }
 
         Self {
-            keys,
+            root,
             buffer: vec![],
         }
     }
 
     pub fn find_mapping(&mut self, key: &KeyPress) -> Option<Mapping> {
-        let mut keys = &self.keys;
+        let mut node = &self.root;
 
         for key_press in &self.buffer {
             let key = key_press;
 
-            match keys {
+            match node {
                 Root(next) | OneOff(_, next) => {
                     if !next.contains_key(key) {
                         self.reset();
                         return None;
                     } else {
-                        keys = &next.get(key).unwrap();
+                        node = &next.get(key).unwrap();
                     }
                 }
-                Repeatable(_, next) => {
-                    if !next.contains(key) {
-                        self.reset();
-                        return None;
+                Repeatable(_, repeatable_set, next) => {
+                    if !repeatable_set.contains(key) {
+                        match next.get(key) {
+                            None => {
+                                self.reset();
+                                return None;
+                            }
+                            Some(next_node) => {
+                                node = next_node;
+                            }
+                        }
                     }
                 }
             }
         }
 
-        match keys {
+        match node {
             Root(next) | OneOff(_, next) => match next.get(key) {
                 None => {
                     self.reset();
@@ -183,19 +207,37 @@ impl MappingTrie {
                         self.buffer.push(key.clone());
                         Some(mapping.clone())
                     }
-                    Repeatable(mapping, _) => {
+                    Repeatable(mapping, _, _) => {
                         self.buffer.push(key.clone());
                         Some(mapping.clone())
                     }
                 },
             },
-            Repeatable(mapping, next) => {
-                if next.contains(key) {
+            Repeatable(mapping, repeatable_set, next) => {
+                if repeatable_set.contains(key) {
                     self.buffer.push(key.clone());
                     Some(mapping.clone())
                 } else {
-                    self.reset();
-                    None
+                    match next.get(key) {
+                        None => {
+                            self.reset();
+                            None
+                        }
+                        Some(next_node) => match next_node {
+                            Root(_) => {
+                                self.reset();
+                                None
+                            }
+                            OneOff(mapping, _) => {
+                                self.buffer.push(key.clone());
+                                Some(mapping.clone())
+                            }
+                            Repeatable(mapping, _, _) => {
+                                self.buffer.push(key.clone());
+                                Some(mapping.clone())
+                            }
+                        },
+                    }
                 }
             }
         }
@@ -248,6 +290,8 @@ mod tests {
     #[case(m!([[t!(KeyA), a!(KeyX, Bye)], [t!(KeyA), aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(KeyA), key!(Key1)], Some(aat!([key!(Key1), key!(Key2)], Bye)))]
     #[case(m!([[t!(KeyA), a!(KeyX, Bye)], [t!(KeyA), aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(KeyA), key!(Key1), key!(Key3)], None)]
     #[case(m!([[t!(KeyA), a!(KeyX, Bye)], [t!(KeyA), aat!([key!(Key1), key!(Key2)], Bye)]]), &[key!(KeyA), key!(Key3)], None)]
+    #[case(m!([[t!(KeyA), tm!([key!(KeyB)]), a!(KeyX, ToggleChannels)]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)], Some(a!(KeyX, ToggleChannels)))]
+    #[case(m!([[t!(KeyA), tm!([key!(KeyB)]), t!(KeyX), tm!([key!(KeyC)]), a!(KeyX, ToggleChannels)]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)], Some(a!(KeyX, ToggleChannels)))]
     fn should_match_keys_to_mappings(
         #[case] mappings: Vec<Vec<Mapping>>,
         #[case] keypresses: &[KeyPress],
