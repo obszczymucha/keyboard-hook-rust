@@ -19,7 +19,7 @@ fn deduplicate(key_presses: &KeyPresses) -> KeyPresses {
 }
 
 impl ActionHandler {
-    pub fn consume(receiver: mpsc::Receiver<ActionType>) {
+    pub fn consume(&self, receiver: mpsc::Receiver<ActionType>) {
         for action in receiver {
             match action {
                 ActionType::Hello => {

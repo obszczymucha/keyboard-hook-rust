@@ -4,40 +4,59 @@ mod mapping_trie;
 mod types;
 mod windows;
 
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 
 use action_handler::ActionHandler;
 use key_handler::KeypressHandler;
 use mapping_trie::{define_mappings, MappingTrie};
-use types::ActionType;
+use types::{ActionType, Mapping};
 
 use crate::windows::KeyboardHookManager;
 
 fn main() {
-    if let Err(e) = run() {
+    let handler = ActionHandler;
+    let app = App::new(define_mappings(), handler);
+
+    if let Err(e) = app.hook() {
         eprintln!("{}", e);
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<(), &'static str> {
-    let (tx, rx) = mpsc::channel::<ActionType>();
+struct App {
+    handler: Arc<ActionHandler>,
+    mappings: Arc<Vec<Vec<Mapping>>>,
+}
 
-    let consumer_handle = thread::spawn(|| {
-        ActionHandler::consume(rx);
-    });
+impl App {
+    fn new(mappings: Vec<Vec<Mapping>>, handler: ActionHandler) -> Self {
+        Self {
+            handler: Arc::new(handler),
+            mappings: Arc::new(mappings),
+        }
+    }
 
-    let producer_handle = thread::spawn(move || {
-        let mut manager = KeyboardHookManager::new()?;
-        let handler = Box::new(KeypressHandler::new(
-            tx.clone(),
-            MappingTrie::from_mappings(&define_mappings()),
-        ));
-        manager.hook(tx.clone(), handler)
-    });
+    fn hook(&self) -> Result<(), &str> {
+        let (tx, rx) = mpsc::channel::<ActionType>();
 
-    let _ = producer_handle.join().unwrap();
-    consumer_handle.join().unwrap();
-    Ok(())
+        let handler = self.handler.clone();
+        let consumer_handle = thread::spawn(move || {
+            handler.consume(rx);
+        });
+
+        let mappings = self.mappings.clone();
+        let producer_handle = thread::spawn(move || {
+            let mut manager = KeyboardHookManager::new()?;
+            let handler = Box::new(KeypressHandler::new(
+                tx.clone(),
+                MappingTrie::from_mappings(&mappings),
+            ));
+            manager.hook(tx.clone(), handler)
+        });
+
+        let _ = producer_handle.join().unwrap();
+        consumer_handle.join().unwrap();
+        Ok(())
+    }
 }
