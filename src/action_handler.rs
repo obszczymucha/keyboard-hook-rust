@@ -1,9 +1,8 @@
-use crate::types::{ActionType, KeyPresses};
+use crate::types::Action;
+use crate::types::KeyPresses;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::{collections::HashSet, sync::mpsc};
-
-pub struct MyActionHandler;
 
 #[allow(dead_code)]
 fn deduplicate(key_presses: &KeyPresses) -> KeyPresses {
@@ -24,5 +23,5 @@ pub trait ActionHandler<T>
 where
     T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
 {
-    fn consume(&self, receiver: mpsc::Receiver<ActionType<T>>);
+    fn consume(&self, receiver: mpsc::Receiver<Action<T>>);
 }

@@ -10,13 +10,15 @@ use std::fmt::Display;
 use std::sync::{mpsc, Arc};
 use std::thread;
 
+use crate::types::Action;
 use crate::types::ActionType::*;
 use crate::types::Key::*;
+use crate::types::Mapping;
 use crate::types::Modifier::*;
-use crate::types::{ActionType, Mapping};
 use action_handler::ActionHandler;
 use key_handler::KeypressHandler;
 use mapping_trie::MappingTrie;
+use types::SystemActionType;
 
 use crate::windows::KeyboardHookManager;
 
@@ -38,6 +40,7 @@ impl fmt::Display for MyActions {
     }
 }
 
+#[allow(dead_code)]
 struct MyApi {
     dupa: bool,
 }
@@ -61,20 +64,22 @@ impl Handler {
 }
 
 impl ActionHandler<MyActions> for Handler {
-    fn consume(&self, receiver: mpsc::Receiver<ActionType<MyActions>>) {
+    fn consume(&self, receiver: mpsc::Receiver<Action<MyActions>>) {
         for action in receiver {
             match action {
-                Hello => {
-                    println!("Keyboard hooked. Press Alt+A -> E -> X -> I -> T to exit.")
-                }
-                User(my_action) => match my_action {
-                    ToggleChannels => println!("ToggleChannels"),
+                Action::System(action) => match action {
+                    SystemActionType::Hello => {
+                        println!("Keyboard hooked. Press Alt+A -> E -> X -> I -> T to exit.")
+                    }
+                    SystemActionType::Bye => println!("Exiting..."),
+                },
+                Action::User(action, keys) => match action {
+                    ToggleChannels => println!("ToggleChannels: {:?}", keys),
                     Volume => {
                         self.api.do_something();
-                        println!("Volume");
+                        println!("Volume: {:?}", keys);
                     }
                 },
-                Bye => println!("Exiting..."),
             }
         }
     }
@@ -87,7 +92,7 @@ fn define_mappings() -> Vec<Vec<Mapping<MyActions>>> {
             t!(KeyE),
             t!(KeyX),
             t!(KeyI),
-            a!(KeyT, ActionType::Bye),
+            a!(KeyT, System(SystemActionType::Bye)),
         ],
         vec![
             t!(KeyA, ModAlt),
@@ -137,7 +142,7 @@ where
     }
 
     fn hook(&self) -> Result<(), &str> {
-        let (tx, rx) = mpsc::channel::<ActionType<T>>();
+        let (tx, rx) = mpsc::channel::<Action<T>>();
 
         let handler = self.handler.clone();
         let consumer_handle = thread::spawn(move || {

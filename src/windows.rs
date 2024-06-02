@@ -1,10 +1,10 @@
+use crate::types::Action;
+use crate::types::Modifier;
+use crate::types::SystemActionType::*;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ptr;
 use std::sync::mpsc;
-
-use crate::types::{ActionType, Modifier};
-
 use winapi::shared::minwindef::{LPARAM, LRESULT, WPARAM};
 use winapi::shared::windef::HHOOK;
 use winapi::um::libloaderapi::GetModuleHandleW;
@@ -46,7 +46,7 @@ impl KeyboardHookManager {
 
     pub fn hook<T: PartialEq + Eq + Clone + Debug + Display + Sync + Send>(
         &mut self,
-        sender: mpsc::Sender<ActionType<T>>,
+        sender: mpsc::Sender<Action<T>>,
         keypress_callback: BoxedKeypressCallback,
     ) -> Result<(), &'static str> {
         unsafe {
@@ -69,7 +69,7 @@ impl KeyboardHookManager {
             }
 
             self.hook = Some(hook);
-            sender.send(ActionType::Hello).unwrap();
+            sender.send(Action::System(Hello)).unwrap();
             Self::start_windows_loop();
             Ok(())
         }

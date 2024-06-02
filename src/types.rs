@@ -18,17 +18,47 @@ impl Display for Modifier {
     }
 }
 
-pub struct Action<T> {
-    action_type: T,
-    keys: Vec<KeyPress>,
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub enum ActionType<T>
+where
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    System(SystemActionType),
+    User(T),
 }
 
-impl<T> Action<T> {
-    fn new(action_type: T, keys: Vec<KeyPress>) -> Self {
-        Self { action_type, keys }
+impl<T> Display for ActionType<T>
+where
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ActionType::System(action) => write!(f, "{}", action),
+            ActionType::User(action) => write!(f, "{}", action),
+        }
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub enum Action<T>
+where
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    System(SystemActionType),
+    User(T, Vec<KeyPress>),
+}
+
+impl<T> Display for Action<T>
+where
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Action::System(action) => write!(f, "{}", action),
+            Action::User(action, _) => write!(f, "{}", action),
+        }
+    }
+}
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub struct KeyPresses(pub Vec<KeyPress>);
 
@@ -221,19 +251,28 @@ impl Display for KeyPressType {
 }
 use KeyPressType::*;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
-#[allow(dead_code)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Mapping<T>
 where
     T: Clone + PartialEq + Eq + Debug + Display + Sync + Send,
 {
     Timeout(KeyPressType),
-    Action(KeyPressType, ActionType<T>),
-    ActionBeforeTimeout(KeyPressType, ActionType<T>),
-    ActionAfterTimeout(KeyPressType, ActionType<T>),
+    Action(KeyPressType, ActionMapping<T>),
 }
 
 use Mapping::*;
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub enum ActionMapping<T>
+where
+    T: Clone + PartialEq + Eq + Debug + Display + Sync + Send,
+{
+    NoTimeout(ActionType<T>),
+    TimeoutAfterAction(ActionType<T>),
+    TimeoutBeforeAction(ActionType<T>),
+}
+
+use ActionMapping::*;
 
 impl<T> Mapping<T>
 where
@@ -242,9 +281,11 @@ where
     pub fn get_key(&self) -> &KeyPressType {
         match self {
             Timeout(key) => key,
-            Action(key, _) => key,
-            ActionBeforeTimeout(key, _) => key,
-            ActionAfterTimeout(key, _) => key,
+            Action(key, action_mapping) => match action_mapping {
+                NoTimeout(_) => key,
+                TimeoutAfterAction(_) => key,
+                TimeoutBeforeAction(_) => key,
+            },
         }
     }
 }
@@ -255,38 +296,31 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Timeout(key) => write!(f, "TimeoutKey: {}", key),
-            Action(key, action) => write!(f, "ActionKey: {} -> {}", key, action),
-            ActionBeforeTimeout(key_press, action) => {
-                write!(f, "ActionBeforeTimeoutKey: {} -> {}", key_press, action)
-            }
-            ActionAfterTimeout(key_presses, action) => {
-                write!(f, "ActionAfterTimeoutKey: {} -> {}", key_presses, action)
-            }
+            Timeout(key) => write!(f, "Timeout: {}", key),
+            Action(key, action_mapping) => match action_mapping {
+                NoTimeout(action_type) => write!(f, "Action: {} -> {}", key, action_type),
+                TimeoutAfterAction(action_type) => {
+                    write!(f, "TimeoutAfterAction: {} -> {}", key, action_type)
+                }
+                TimeoutBeforeAction(action) => {
+                    write!(f, "ActionAfterTimeoutKey: {} -> {}", key, action)
+                }
+            },
         }
     }
 }
 
-#[allow(dead_code)]
 #[derive(PartialEq, Eq, Clone, Debug)]
-pub enum ActionType<T>
-where
-    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync,
-{
+pub enum SystemActionType {
     Hello,
-    User(T),
     Bye,
 }
 
-impl<T> Display for ActionType<T>
-where
-    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
-{
+impl Display for SystemActionType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ActionType::Hello => write!(f, "Hello"),
-            ActionType::User(action) => write!(f, "{}", action),
-            ActionType::Bye => write!(f, "Bye"),
+            SystemActionType::Hello => write!(f, "Hello"),
+            SystemActionType::Bye => write!(f, "Bye"),
         }
     }
 }
