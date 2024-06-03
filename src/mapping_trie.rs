@@ -3,7 +3,10 @@ use std::fmt::Debug;
 use std::fmt::Display;
 
 use crate::key_handler::KeyHandlerAction;
-use crate::types::{Action, ActionMapping, KeyPresses};
+use crate::key_handler::KeyHandlerAction::*;
+use crate::types::ActionMapping::*;
+use crate::types::ActionType::*;
+use crate::types::{Action, KeyPresses};
 use crate::types::{KeyPress, KeyPressType::Choice, KeyPressType::Single, Mapping};
 
 type KeyHashMap<T> = HashMap<KeyPress, MappingTrieNode<T>>;
@@ -46,40 +49,30 @@ where
     T: PartialEq + Eq + Clone + Debug + Display + Send + Sync,
 {
     match mapping {
-        Mapping::Timeout(_) => KeyHandlerAction::Timeout,
+        Mapping::Timeout(_) => Timeout,
         Mapping::Action(_, action_mapping) => match action_mapping {
-            ActionMapping::NoTimeout(action_type) => match action_type {
-                crate::types::ActionType::System(system_action_type) => {
-                    KeyHandlerAction::SendAction(Action::System(system_action_type.clone()))
+            NoTimeout(action_type) => match action_type {
+                System(system_action_type) => {
+                    SendAction(Action::System(system_action_type.clone()))
                 }
-                crate::types::ActionType::User(user_action_type) => KeyHandlerAction::SendAction(
-                    Action::User(user_action_type.clone(), keys.to_vec()),
-                ),
-            },
-            ActionMapping::TimeoutAfterAction(action_type) => match action_type {
-                crate::types::ActionType::System(system_action_type) => {
-                    KeyHandlerAction::SendActionBeforeTimeout(Action::System(
-                        system_action_type.clone(),
-                    ))
-                }
-                crate::types::ActionType::User(user_action_type) => {
-                    KeyHandlerAction::SendActionBeforeTimeout(Action::User(
-                        user_action_type.clone(),
-                        keys.to_vec(),
-                    ))
+                User(user_action_type) => {
+                    SendAction(Action::User(user_action_type.clone(), keys.to_vec()))
                 }
             },
-            ActionMapping::TimeoutBeforeAction(action_type) => match action_type {
-                crate::types::ActionType::System(system_action_type) => {
-                    KeyHandlerAction::SendActionOnTimeout(Action::System(
-                        system_action_type.clone(),
-                    ))
+            TimeoutAfterAction(action_type) => match action_type {
+                System(system_action_type) => {
+                    SendActionBeforeTimeout(Action::System(system_action_type.clone()))
                 }
-                crate::types::ActionType::User(user_action_type) => {
-                    KeyHandlerAction::SendActionOnTimeout(Action::User(
-                        user_action_type.clone(),
-                        keys.to_vec(),
-                    ))
+                User(user_action_type) => {
+                    SendActionBeforeTimeout(Action::User(user_action_type.clone(), keys.to_vec()))
+                }
+            },
+            TimeoutBeforeAction(action_type) => match action_type {
+                System(system_action_type) => {
+                    SendActionOnTimeout(Action::System(system_action_type.clone()))
+                }
+                User(user_action_type) => {
+                    SendActionOnTimeout(Action::User(user_action_type.clone(), keys.to_vec()))
                 }
             },
         },
@@ -295,7 +288,7 @@ mod tests {
 
     macro_rules! timeout {
         () => {
-            KeyHandlerAction::Timeout
+            $crate::key_handler::KeyHandlerAction::Timeout
         };
     }
 
