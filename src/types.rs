@@ -224,6 +224,10 @@ impl KeyPress {
     pub fn alt(key: Key) -> Self {
         Self(key, ModAlt)
     }
+
+    pub fn get_key(&self) -> Key {
+        self.0.clone()
+    }
 }
 
 impl Display for KeyPress {
