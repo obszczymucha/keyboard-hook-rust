@@ -1,21 +1,19 @@
-mod action_handler;
-mod key_handler;
-mod keyboard_hook;
-mod mapping_trie;
-mod types;
-mod windows;
-
-use crate::types::Action;
-use crate::types::ActionType::*;
-use crate::types::Key::*;
-use crate::types::Mapping;
-use crate::types::Modifier::*;
-use action_handler::ActionHandler;
 use core::fmt;
+use keyboard_hook::a;
+use keyboard_hook::aat;
+use keyboard_hook::abt;
+use keyboard_hook::key;
+use keyboard_hook::t;
+use keyboard_hook::types::Action;
+use keyboard_hook::types::ActionType::*;
+use keyboard_hook::types::Key::*;
+use keyboard_hook::types::Mapping;
+use keyboard_hook::types::Modifier::*;
+use keyboard_hook::types::SystemActionType;
+use keyboard_hook::ActionHandler;
 use keyboard_hook::KeyboardHook;
 use std::fmt::Debug;
 use std::sync::mpsc;
-use types::SystemActionType;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 #[allow(dead_code)]
@@ -35,28 +33,7 @@ impl fmt::Display for MyActions {
     }
 }
 
-#[allow(dead_code)]
-struct MyApi {
-    dupa: bool,
-}
-
-impl MyApi {
-    fn new() -> Self {
-        Self { dupa: true }
-    }
-
-    fn do_something(&self) {}
-}
-
-struct Handler {
-    api: MyApi,
-}
-
-impl Handler {
-    fn new(api: MyApi) -> Self {
-        Self { api }
-    }
-}
+struct Handler;
 
 impl ActionHandler<MyActions> for Handler {
     fn handle(&self, receiver: mpsc::Receiver<Action<MyActions>>) {
@@ -70,10 +47,7 @@ impl ActionHandler<MyActions> for Handler {
                 },
                 Action::User(action, keys) => match action {
                     ToggleChannels => println!("ToggleChannels: {:?}", keys),
-                    Volume => {
-                        self.api.do_something();
-                        println!("Volume: {:?}", keys);
-                    }
+                    Volume => println!("Volume: {:?}", keys),
                 },
             }
         }
@@ -104,8 +78,7 @@ fn define_mappings() -> Vec<Vec<Mapping<MyActions>>> {
 }
 
 fn main() {
-    let api = MyApi::new();
-    let handler = Handler::new(api);
+    let handler = Handler;
     let app = KeyboardHook::new(define_mappings(), Box::new(handler));
 
     if let Err(e) = app.hook() {

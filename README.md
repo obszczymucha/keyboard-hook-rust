@@ -1,5 +1,8 @@
 # keyboard-hook-rust
 
+A keyboard mapping framework for Windows.
+
+
 ## Developing on Linux with cross-compilation for Windows
 
 ### Requirements
@@ -7,9 +10,10 @@
  * folke/neoconf plugin
  * mingw-w64 package (`sudo pacman -Sy mingw-w64`)
 
-### Building
-Run:
+
+### How to use
+See `examples/demo.rs` and run it:
   ```bash
-  ./build.sh [--release]
+  cargo run --example demo
   ```
 

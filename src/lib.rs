@@ -1,8 +1,14 @@
-use crate::action_handler::ActionHandler;
+pub mod action_handler;
+mod key_handler;
+pub mod macros;
+mod mapping_trie;
+pub mod types;
+mod windows;
+
+pub use crate::action_handler::ActionHandler;
 use crate::key_handler::KeypressHandler;
 use crate::mapping_trie::MappingTrie;
-use crate::types::Action;
-use crate::types::Mapping;
+use crate::types::*;
 use crate::windows::KeyboardHookManager;
 use std::fmt::Debug;
 use std::fmt::Display;
