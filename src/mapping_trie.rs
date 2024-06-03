@@ -105,7 +105,7 @@ where
 
 use MappingTrieNode::*;
 
-pub struct MappingTrie<T>
+pub(crate) struct MappingTrie<T>
 where
     T: PartialEq + Eq + Clone + Debug + Display + Send + Sync,
 {
@@ -219,6 +219,7 @@ where
             }
         }
     }
+
     pub fn from_mappings(mappings: &Vec<Vec<Mapping<T>>>) -> Self {
         let mut root: MappingTrieNode<T> = Root(HashMap::new());
 

@@ -36,7 +36,7 @@ where
 
         let handler = self.handler.clone();
         let consumer_handle = thread::spawn(move || {
-            handler.consume(rx);
+            handler.handle(rx);
         });
 
         let mappings = self.mappings.clone();

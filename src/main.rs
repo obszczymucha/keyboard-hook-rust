@@ -59,7 +59,7 @@ impl Handler {
 }
 
 impl ActionHandler<MyActions> for Handler {
-    fn consume(&self, receiver: mpsc::Receiver<Action<MyActions>>) {
+    fn handle(&self, receiver: mpsc::Receiver<Action<MyActions>>) {
         for action in receiver {
             match action {
                 Action::System(action) => match action {

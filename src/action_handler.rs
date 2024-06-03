@@ -23,5 +23,5 @@ pub trait ActionHandler<T>
 where
     T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
 {
-    fn consume(&self, receiver: mpsc::Receiver<Action<T>>);
+    fn handle(&self, receiver: mpsc::Receiver<Action<T>>);
 }

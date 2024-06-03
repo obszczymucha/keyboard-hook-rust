@@ -20,18 +20,18 @@ static mut HOOK_MANAGER: *mut KeyboardHookManager = ptr::null_mut();
 
 const KEY_PRESSED_MASK: u16 = 0x8000;
 
-pub enum HookAction {
+pub(crate) enum HookAction {
     Suppress,
     PassOn,
 }
 
-pub trait KeypressCallback {
+pub(crate) trait KeypressCallback {
     fn handle(&mut self, key: u32, modifiers: &[Modifier]) -> HookAction;
 }
 
 type BoxedKeypressCallback = Box<dyn KeypressCallback>;
 
-pub struct KeyboardHookManager {
+pub(crate) struct KeyboardHookManager {
     hook: Option<HHOOK>,
     callback: Option<BoxedKeypressCallback>,
 }

@@ -29,7 +29,7 @@ where
 /// KeypressHandler should determine if we can handle the key press by determining the action. If
 /// the key press results in an action, we'll suppress propagating the key press event (Suppress),
 /// otherwise we'll let other hooks handle it (PassOn).
-pub struct KeypressHandler<T>
+pub(crate) struct KeypressHandler<T>
 where
     T: PartialEq + Eq + Clone + Debug + Send + Sync + Display,
 {
@@ -116,7 +116,7 @@ where
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum KeyHandlerAction<T>
+pub(crate) enum KeyHandlerAction<T>
 where
     T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display,
 {
