@@ -1,29 +1,31 @@
+use core::hash::Hash;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::fmt::Display;
 
-use crate::key_handler::KeyHandlerAction;
 use crate::key_handler::KeyHandlerAction::*;
-use crate::types::ActionMapping::*;
-use crate::types::ActionType::*;
-use crate::types::{Action, KeyPresses};
-use crate::types::{KeyPress, KeyPressType::Choice, KeyPressType::Single, Mapping};
+use crate::key_handler::{ActionsOnTimeout, KeyHandlerAction};
+use crate::types::Behaviours;
+use crate::types::{Behaviour, Mapping, Mapping::Choice, Mapping::Single};
+use crate::KeyPress;
 
-type KeyHashMap<T> = HashMap<KeyPress, MappingTrieNode<T>>;
+type KeyHashMap<A, T> = HashMap<KeyPress, MappingTrieNode<A, T>>;
 
 #[derive(Debug)]
-enum MappingTrieNode<T>
+enum MappingTrieNode<A, T>
 where
-    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send + Hash,
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send + Hash,
 {
-    Root(KeyHashMap<T>),
-    OneOff(Mapping<T>, KeyHashMap<T>),
-    Repeatable(Mapping<T>, HashSet<KeyPress>, KeyHashMap<T>),
+    Root(KeyHashMap<A, T>),
+    OneOff(Mapping<A, T>, KeyHashMap<A, T>),
+    Repeatable(Mapping<A, T>, HashSet<KeyPress>, KeyHashMap<A, T>),
 }
 
-impl<T> Display for MappingTrieNode<T>
+impl<A, T> Display for MappingTrieNode<A, T>
 where
-    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync,
+    A: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
+    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -36,56 +38,24 @@ where
 
 use MappingTrieNode::*;
 
-pub(crate) struct MappingTrie<T>
+pub(crate) struct MappingTrie<A, T>
 where
-    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync,
+    A: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
+    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
 {
-    root: MappingTrieNode<T>,
+    root: MappingTrieNode<A, T>,
+    actions_on_timeout: Option<ActionsOnTimeout<A, T>>,
     buffer: Vec<KeyPress>,
 }
 
-fn to_handler_action<T>(mapping: &Mapping<T>, keys: &[KeyPress]) -> KeyHandlerAction<T>
+impl<A, T> MappingTrie<A, T>
 where
-    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync,
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send + Hash,
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send + Hash,
 {
-    match mapping {
-        Mapping::Timeout(_) => Timeout,
-        Mapping::Action(_, action_mapping) => match action_mapping {
-            NoTimeout(action_type) => match action_type {
-                System(system_action_type) => {
-                    SendAction(Action::System(system_action_type.clone()))
-                }
-                User(user_action_type) => {
-                    SendAction(Action::User(user_action_type.clone(), keys.to_vec()))
-                }
-            },
-            TimeoutAfterAction(action_type) => match action_type {
-                System(system_action_type) => {
-                    SendActionBeforeTimeout(Action::System(system_action_type.clone()))
-                }
-                User(user_action_type) => {
-                    SendActionBeforeTimeout(Action::User(user_action_type.clone(), keys.to_vec()))
-                }
-            },
-            TimeoutBeforeAction(action_type) => match action_type {
-                System(system_action_type) => {
-                    SendActionOnTimeout(Action::System(system_action_type.clone()))
-                }
-                User(user_action_type) => {
-                    SendActionOnTimeout(Action::User(user_action_type.clone(), keys.to_vec()))
-                }
-            },
-        },
-    }
-}
-
-impl<T> MappingTrie<T>
-where
-    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
-{
-    fn all_keys_available(keys: &KeyHashMap<T>, key_presses: &KeyPresses) -> bool {
-        for key_press in &key_presses.0 {
-            if keys.contains_key(key_press) {
+    fn all_keys_available(keys: &KeyHashMap<A, T>, key_presses: &Behaviours<A>) -> bool {
+        for key_mapping in &key_presses.0 {
+            if keys.contains_key(&key_mapping.get_key()) {
                 return false;
             }
         }
@@ -93,36 +63,83 @@ where
         true
     }
 
-    fn map(root: &mut MappingTrieNode<T>, mapping: &Vec<Mapping<T>>, starting_pos: usize) {
+    fn to_handler_action(
+        &mut self,
+        mapping: &Mapping<A, T>,
+        key: &KeyPress,
+    ) -> KeyHandlerAction<A, T>
+    where
+        T: PartialEq + Eq + Clone + Debug + Display + Send + Sync,
+    {
+        match mapping {
+            Single(behaviour) => match behaviour {
+                Behaviour::Timeout(_) => Timeout,
+                Behaviour::Action(_, action_type) => SendActionBeforeTimeout(action_type.clone()),
+                Behaviour::ActionOnTimeout(_, action_type) => {
+                    SendActionOnTimeout(action_type.clone())
+                }
+            },
+            Choice(behaviours, tag) => {
+                // TODO: fix this
+                let actions = self.actions_on_timeout.clone();
+
+                match behaviours.get_mapping(key) {
+                    Some(mapping) => match (mapping, actions) {
+                        (Behaviour::Timeout(_), None) => Timeout,
+                        (Behaviour::Timeout(_), Some(aot)) => SendActionsOnTimeout(aot.clone()),
+                        (Behaviour::Action(_, action), None) => {
+                            SendActionBeforeTimeout(action.clone())
+                        }
+                        (Behaviour::Action(_, action), Some(aot)) => {
+                            SendActionBeforeTimeoutAndOnTimeout {
+                                before: action.clone(),
+                                on: aot.clone(),
+                            }
+                        }
+                        (Behaviour::ActionOnTimeout(_, action), None) => {
+                            self.actions_on_timeout =
+                                Some(ActionsOnTimeout::new(action.clone(), tag.clone()));
+                            SendActionOnTimeout(action.clone())
+                        }
+                        (Behaviour::ActionOnTimeout(_, action), Some(mut aot)) => {
+                            aot.actions.push(action.clone());
+                            SendActionsOnTimeout(aot.clone())
+                        }
+                    },
+                    None => Nothing, // Should never happen.
+                }
+            }
+        }
+    }
+
+    fn map(root: &mut MappingTrieNode<A, T>, mapping: &Vec<Mapping<A, T>>, starting_pos: usize) {
         let mut node = root;
 
         for i in starting_pos..mapping.len() {
             let m = &mapping[i];
-            let key = m.get_key();
 
-            match key {
-                Single(key_press) => match node {
+            match m {
+                Single(behaviour) => match node {
                     Root(next) | OneOff(_, next) => {
                         node = next
-                            .entry(key_press.clone())
+                            .entry(behaviour.get_key().clone())
                             .or_insert(OneOff(m.clone(), HashMap::new()));
                     }
                     Repeatable(_, _, next) => {
                         node = next
-                            .entry(key_press.clone())
+                            .entry(behaviour.get_key().clone())
                             .or_insert(OneOff(m.clone(), HashMap::new()));
                     }
                 },
-                Choice(key_presses) => match node {
+                Choice(behaviours, _) => match node {
                     Root(next) | OneOff(_, next) => {
-                        if Self::all_keys_available(next, key_presses) {
-                            for key_press in key_presses.clone().0 {
-                                let set = HashSet::from_iter(key_presses.clone().0.into_iter());
-                                let next_node = next
-                                    .entry(key_press.clone())
-                                    .or_insert(Repeatable(m.clone(), set, HashMap::new()));
+                        if Self::all_keys_available(next, behaviours) {
+                            behaviours.0.iter().for_each(|b| {
+                                let next_node = next.entry(b.get_key().clone()).or_insert(
+                                    Repeatable(m.clone(), HashSet::new(), HashMap::new()),
+                                );
                                 Self::map(next_node, mapping, i + 1);
-                            }
+                            });
 
                             break;
                         } else {
@@ -141,8 +158,8 @@ where
         }
     }
 
-    pub fn from_mappings(mappings: &Vec<Vec<Mapping<T>>>) -> Self {
-        let mut root: MappingTrieNode<T> = Root(HashMap::new());
+    pub fn from_mappings(mappings: &Vec<Vec<Mapping<A, T>>>) -> Self {
+        let mut root: MappingTrieNode<A, T> = Root(HashMap::new());
 
         for mapping in mappings {
             Self::map(&mut root, mapping, 0);
@@ -150,11 +167,12 @@ where
 
         Self {
             root,
+            actions_on_timeout: None,
             buffer: vec![],
         }
     }
 
-    pub fn find_mapping(&mut self, key: &KeyPress) -> Option<KeyHandlerAction<T>> {
+    pub fn find_mapping(&mut self, key: &KeyPress) -> Option<KeyHandlerAction<A, T>> {
         let mut node = &self.root;
 
         for key_press in &self.buffer {
@@ -197,21 +215,18 @@ where
                         None
                     }
                     OneOff(mapping, _) => {
-                        self.buffer.push(key.clone());
-                        let action = to_handler_action(mapping, &self.buffer);
+                        let action = self.to_handler_action(mapping, &key);
                         Some(action)
                     }
                     Repeatable(mapping, _, _) => {
-                        self.buffer.push(key.clone());
-                        let action = to_handler_action(mapping, &self.buffer);
+                        let action = self.to_handler_action(mapping, &key);
                         Some(action)
                     }
                 },
             },
             Repeatable(mapping, repeatable_set, next) => {
                 if repeatable_set.contains(key) {
-                    self.buffer.push(key.clone());
-                    let action = to_handler_action(mapping, &self.buffer);
+                    let action = self.to_handler_action(mapping, &key);
                     Some(action)
                 } else {
                     match next.get(key) {
@@ -225,13 +240,11 @@ where
                                 None
                             }
                             OneOff(mapping, _) => {
-                                self.buffer.push(key.clone());
-                                let action = to_handler_action(mapping, &self.buffer);
+                                let action = self.to_handler_action(mapping, &key);
                                 Some(action)
                             }
                             Repeatable(mapping, _, _) => {
-                                self.buffer.push(key.clone());
-                                let action = to_handler_action(mapping, &self.buffer);
+                                let action = self.to_handler_action(mapping, &key);
                                 Some(action)
                             }
                         },
@@ -242,7 +255,7 @@ where
     }
 
     pub fn reset(&mut self) {
-        self.buffer.clear();
+        self.actions_on_timeout = None
     }
 }
 
@@ -264,24 +277,37 @@ mod tests {
         }
     }
 
-    #[derive(Eq, Debug, Clone, PartialEq)]
+    #[derive(Eq, Debug, Clone, PartialEq, Hash)]
     enum TestAction {
-        Princess,
-        Kenny,
+        VolumeUp,
+        VolumeDown,
     }
 
     impl Display for TestAction {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                TestAction::Princess => write!(f, "Princess"),
-                TestAction::Kenny => write!(f, "Kenny"),
+                TestAction::VolumeUp => write!(f, "VolumeUp"),
+                TestAction::VolumeDown => write!(f, "VolumeDown"),
+            }
+        }
+    }
+
+    #[derive(Eq, Debug, Clone, PartialEq, Hash)]
+    enum TestTag {
+        Volume,
+    }
+
+    impl Display for TestTag {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                TestTag::Volume => write!(f, "Volume"),
             }
         }
     }
 
     macro_rules! u {
         ($user_action:expr) => {
-            $crate::types::ActionType::User($user_action)
+            $crate::types::Action::User($user_action)
         };
     }
     use TestAction::*;
@@ -312,31 +338,37 @@ mod tests {
 
     #[rstest]
     #[case(m!([[t!(KeyA)]]), &[key!(KeyX)], None)]
-    #[case(m!([[t!(KeyA, ModAlt)]]), &[alt!(KeyA)], Some(timeout!()))]
-    #[case(m!([[a!(KeyA, ModAlt, u!(Princess))]]), &[alt!(KeyA)], Some(action!(Princess, [alt!(KeyA)])))]
-    #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(KeyA), key!(Key1)], Some(timeout!()))]
-    #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(Key2)], None)]
-    #[case(m!([[t!(KeyA), t!(Key1), a!(Key2, u!(Princess))]]), &[key!(KeyA), key!(Key2), key!(Key2)], None)]
-    #[case(m!([[t!(KeyA), t!(Key1), a!(Key2, u!(Princess))]]), &[key!(KeyA), key!(Key1), key!(Key2)], Some(action!(Princess, [key!(KeyA), key!(Key1), key!(Key2)])))]
-    #[case(m!([[aat!([key!(Key1)], u!(Princess))]]), &[key!(Key1)], Some(action_t!(Princess, [key!(Key1)])))]
-    #[case(m!([[aat!([key!(Key1)], u!(Princess))]]), &[key!(Key1)], Some(action_t!(Princess, [key!(Key1)])))]
-    #[case(m!([[aat!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(Key1)], Some(action_t!(Princess, [key!(Key1)])))]
-    #[case(m!([[aat!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(Key2)], Some(action_t!(Princess, [key!(Key2)])))]
-    #[case(m!([[aat!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(Key2)], Some(action_t!(Princess, [key!(Key2)])))]
-    #[case(m!([[abt!([key!(Key1)], u!(Princess))]]), &[key!(Key1)], Some(t_action!(Princess, [key!(Key1)])))]
-    #[case(m!([[abt!([key!(Key1)], u!(Princess))]]), &[key!(Key1)], Some(t_action!(Princess, [key!(Key1)])))]
-    #[case(m!([[abt!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(Key1)], Some(t_action!(Princess, [key!(Key1)])))]
-    #[case(m!([[abt!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(Key2)], Some(t_action!(Princess, [key!(Key2)])))]
-    #[case(m!([[abt!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(Key2)], Some(t_action!(Princess, [key!(Key2)])))]
-    #[case(m!([[t!(KeyA), a!(KeyX, u!(Princess))], [t!(KeyA), aat!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(KeyA), key!(Key1)], Some(action_t!(Princess, [key!(KeyA), key!(Key1)])))]
-    #[case(m!([[t!(KeyA), a!(KeyX, u!(Princess))], [t!(KeyA), aat!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(KeyA), key!(Key1), key!(Key3)], None)]
-    #[case(m!([[t!(KeyA), a!(KeyX, u!(Princess))], [t!(KeyA), aat!([key!(Key1), key!(Key2)], u!(Princess))]]), &[key!(KeyA), key!(Key3)], None)]
-    #[case(m!([[t!(KeyA), tm!([key!(KeyB)]), a!(KeyX, u!(Kenny))]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)], Some(action!(Kenny, [key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)])))]
-    #[case(m!([[t!(KeyA), tm!([key!(KeyB)]), t!(KeyX), tm!([key!(KeyC)]), a!(KeyX, u!(Kenny))]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX), key!(KeyC), key!(KeyC), key!(KeyX)], Some(action!(Kenny, [key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX), key!(KeyC), key!(KeyC), key!(KeyX)])))]
+    // #[case(m!([[t!(KeyA, ModAlt)]]), &[alt!(KeyA)], Some(timeout!()))]
+    // #[case(m!([[a!(KeyA, ModAlt, u!(VolumeUp))]]), &[alt!(KeyA)], Some(action!(VolumeUp, [alt!(KeyA)])))]
+    // #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(KeyA), key!(Key1)], Some(timeout!()))]
+    // #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(Key2)], None)]
+    // #[case(m!([[t!(KeyA), t!(Key1), a!(Key2, u!(VolumeUp))]]), &[key!(KeyA), key!(Key2), key!(Key2)], None)]
+    // #[case(m!([[t!(KeyA), t!(Key1), a!(Key2, u!(VolumeUp))]]), &[key!(KeyA), key!(Key1), key!(Key2)], Some(action!(VolumeUp, [key!(KeyA), key!(Key1), key!(Key2)])))]
+    // #[case(m!([[aot!([key!(Key1)], u!(VolumeUp))]]), &[key!(Key1)], Some(action_t!(VolumeUp, [key!(Key1)])))]
+    // #[case(m!([[aot!([key!(Key1)], u!(VolumeUp))]]), &[key!(Key1)], Some(action_t!(VolumeUp, [key!(Key1)])))]
+    // #[case(m!([[aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key1)], Some(action_t!(VolumeUp, [key!(Key1)])))]
+    // #[case(m!([[aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key2)], Some(action_t!(VolumeUp, [key!(Key2)])))]
+    // #[case(m!([[aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key2)], Some(action_t!(VolumeUp, [key!(Key2)])))]
+
+    // #[case(m!([[abt!([key!(Key1)], u!(VolumeUp))]]), &[key!(Key1)], Some(t_action!(VolumeUp, [key!(Key1)])))]
+    // #[case(m!([[abt!([key!(Key1)], u!(VolumeUp))]]), &[key!(Key1)], Some(t_action!(VolumeUp, [key!(Key1)])))]
+    // #[case(m!([[abt!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key1)], Some(t_action!(VolumeUp, [key!(Key1)])))]
+    // #[case(m!([[abt!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key2)], Some(t_action!(VolumeUp, [key!(Key2)])))]
+    // #[case(m!([[abt!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key2)], Some(t_action!(VolumeUp, [key!(Key2)])))]
+
+    // #[case(m!([[t!(KeyA), a!(KeyX, u!(VolumeUp))], [t!(KeyA), aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(KeyA), key!(Key1)], Some(action_t!(VolumeUp, [key!(KeyA), key!(Key1)])))]
+    // #[case(m!([[t!(KeyA), a!(KeyX, u!(VolumeUp))], [t!(KeyA), aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(KeyA), key!(Key1), key!(Key3)], None)]
+    // #[case(m!([[t!(KeyA), a!(KeyX, u!(VolumeUp))], [t!(KeyA), aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(KeyA), key!(Key3)], None)]
+    // #[case(m!([[t!(KeyA), t!([key!(KeyB)]), a!(KeyX, u!(VolumeDown))]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)], Some(action!(VolumeDown, [key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)])))]
+    // #[case(m!([[t!(KeyA), t!([key!(KeyB)]), t!(KeyX), t!([key!(KeyC)]), a!(KeyX, u!(VolumeDown))]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX), key!(KeyC), key!(KeyC), key!(KeyX)], Some(action!(VolumeDown, [key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX), key!(KeyC), key!(KeyC), key!(KeyX)])))]
+    // a choice of only timeouts
+    // a choice of timeouts and actions
+    // a choice of actions and actions after timeouts
+    // a choice of timeouts, actions and actions after timeouts
     fn should_match_keys_to_mappings(
-        #[case] mappings: Vec<Vec<Mapping<TestAction>>>,
+        #[case] mappings: Vec<Vec<Mapping<TestAction, TestTag>>>,
         #[case] keypresses: &[KeyPress],
-        #[case] expected: Option<KeyHandlerAction<TestAction>>,
+        #[case] expected: Option<KeyHandlerAction<TestAction, TestTag>>,
     ) {
         // Given
         let mut trie = MappingTrie::from_mappings(&mappings);

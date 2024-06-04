@@ -1,6 +1,6 @@
-use crate::types::Action;
+use crate::types::Event;
 use crate::types::Modifier;
-use crate::types::SystemActionType::*;
+use crate::types::SystemAction::*;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ptr;
@@ -44,11 +44,15 @@ impl KeyboardHookManager {
         })
     }
 
-    pub fn hook<T: PartialEq + Eq + Clone + Debug + Display + Sync + Send>(
+    pub fn hook<A, T>(
         &mut self,
-        sender: mpsc::Sender<Action<T>>,
+        sender: mpsc::Sender<Event<A, T>>,
         keypress_callback: BoxedKeypressCallback,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), &'static str>
+    where
+        A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+        T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+    {
         unsafe {
             if !HOOK_MANAGER.is_null() {
                 return Err("Keyboard hook is already installed.");
@@ -69,7 +73,7 @@ impl KeyboardHookManager {
             }
 
             self.hook = Some(hook);
-            sender.send(Action::System(Hello)).unwrap();
+            sender.send(Event::System(Hello)).unwrap();
             Self::start_windows_loop();
             Ok(())
         }

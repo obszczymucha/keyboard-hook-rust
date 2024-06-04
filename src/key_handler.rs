@@ -1,10 +1,12 @@
 use crate::mapping_trie::MappingTrie;
+use crate::types::Key;
 use crate::types::Modifier;
-use crate::types::SystemActionType;
-use crate::types::{Action, Modifier::*};
-use crate::types::{Key, KeyPress};
+use crate::types::SystemAction;
+use crate::types::{Event, Modifier::*};
 use crate::windows::HookAction::{PassOn, Suppress};
 use crate::windows::{HookAction, KeyboardHookManager, KeypressCallback};
+use crate::KeyPress;
+use core::hash::Hash;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::{mpsc, Arc, Condvar, Mutex};
@@ -13,37 +15,78 @@ use std::time::Duration;
 
 const TIMEOUT_MS: u64 = 650;
 
-struct SharedState<T>
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct ActionsOnTimeout<A, T>
 where
-    T: PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+    A: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
+    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
 {
-    sender: mpsc::Sender<Action<T>>,
+    pub actions: Vec<A>,
+    pub tag: T,
+}
+
+impl<A, T> ActionsOnTimeout<A, T>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
+    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
+{
+    pub fn new(action: A, tag: T) -> Self {
+        Self {
+            actions: vec![action],
+            tag,
+        }
+    }
+}
+
+impl<A, T> Display for ActionsOnTimeout<A, T>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
+    T: PartialEq + Eq + Clone + Debug + Display + Send + Sync + Hash,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ActionsOnTimeout(actions: {:?}, tag: {})",
+            self.actions, self.tag
+        )
+    }
+}
+
+struct SharedState<A, T>
+where
+    A: PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
+    T: PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
+{
+    sender: mpsc::Sender<Event<A, T>>,
     timeout_cancelled: bool,
     quitting: bool,
     timeout_retrigger: bool,
     timeout_running: bool,
-    timeout_action: Option<Action<T>>,
-    mapping_trie: MappingTrie<T>,
+    timeout_action: Option<A>,
+    timeout_actions: Option<ActionsOnTimeout<A, T>>,
+    mapping_trie: MappingTrie<A, T>,
 }
 
 /// KeypressHandler should determine if we can handle the key press by determining the action. If
 /// the key press results in an action, we'll suppress propagating the key press event (Suppress),
 /// otherwise we'll let other hooks handle it (PassOn).
-pub(crate) struct KeypressHandler<T>
+pub(crate) struct KeypressHandler<A, T>
 where
-    T: PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+    A: PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
+    T: PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
 {
-    state: Arc<(Mutex<SharedState<T>>, Condvar)>,
+    state: Arc<(Mutex<SharedState<A, T>>, Condvar)>,
 }
 
-impl<T> KeypressHandler<T>
+impl<A, T> KeypressHandler<A, T>
 where
-    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+    A: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
+    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
 {
     pub fn new(
-        sender: mpsc::Sender<crate::types::Action<T>>,
-        mapping_trie: MappingTrie<T>,
-    ) -> KeypressHandler<T> {
+        sender: mpsc::Sender<crate::types::Event<A, T>>,
+        mapping_trie: MappingTrie<A, T>,
+    ) -> KeypressHandler<A, T> {
         KeypressHandler {
             state: Arc::new((
                 Mutex::new(SharedState {
@@ -53,6 +96,7 @@ where
                     timeout_retrigger: false,
                     timeout_running: false,
                     timeout_action: None,
+                    timeout_actions: None,
                     mapping_trie,
                 }),
                 Condvar::new(),
@@ -60,7 +104,7 @@ where
         }
     }
 
-    fn start_timeout(state_arc: Arc<(Mutex<SharedState<T>>, Condvar)>) {
+    fn start_timeout(state_arc: Arc<(Mutex<SharedState<A, T>>, Condvar)>) {
         let (mutex, _) = &*state_arc;
         let state = mutex.lock().unwrap();
 
@@ -82,7 +126,7 @@ where
                 .wait_timeout_while(
                     state,
                     Duration::from_millis(TIMEOUT_MS),
-                    |s: &mut SharedState<T>| {
+                    |s: &mut SharedState<A, T>| {
                         !s.timeout_retrigger && !s.quitting && !s.timeout_cancelled
                     },
                 )
@@ -98,16 +142,31 @@ where
             if timeout_result.timed_out() && !state.timeout_retrigger && !state.timeout_cancelled {
                 println!("Timeout!");
                 state.mapping_trie.reset();
-                let timeout_action = state.timeout_action.clone();
 
-                if let Some(action) = timeout_action {
-                    state.timeout_action = None;
-                    state.sender.send(action.clone()).unwrap();
+                if let Some(timeout_action) = state.timeout_action {
+                    state
+                        .sender
+                        .send(Event::Single(timeout_action.clone()))
+                        .unwrap();
                 }
 
+                if let Some(timeout_actions) = state.timeout_actions {
+                    state
+                        .sender
+                        .send(Event::Multi(
+                            timeout_actions.tag,
+                            timeout_actions.actions.clone(),
+                        ))
+                        .unwrap();
+                }
+
+                state.timeout_actions = None;
+                state.timeout_action = None;
                 state.timeout_running = false;
                 break;
             } else if state.timeout_cancelled {
+                state.timeout_actions = None;
+                state.timeout_action = None;
                 state.timeout_running = false;
                 break;
             }
@@ -116,37 +175,57 @@ where
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) enum KeyHandlerAction<T>
+pub(crate) enum KeyHandlerAction<A, T>
 where
-    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+    A: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
+    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
 {
+    Nothing, // TODO: Add reason for clarity.
     Timeout,
-    SendAction(Action<T>),
-    SendActionBeforeTimeout(Action<T>),
-    SendActionOnTimeout(Action<T>),
+    SendAction(A),
+    SendActionBeforeTimeout(A),
+    SendActionOnTimeout(A),
+    SendActionsOnTimeout(ActionsOnTimeout<A, T>),
+    SendActionBeforeTimeoutAndOnTimeout {
+        before: A,
+        on: ActionsOnTimeout<A, T>,
+    },
 }
 
-impl<T> Display for KeyHandlerAction<T>
+use KeyHandlerAction::*;
+
+impl<A, T> Display for KeyHandlerAction<A, T>
 where
-    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+    A: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
+    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            KeyHandlerAction::Timeout => write!(f, "Timeout"),
-            KeyHandlerAction::SendAction(action) => write!(f, "SendAction({})", action),
-            KeyHandlerAction::SendActionBeforeTimeout(action) => {
+            Nothing => write!(f, "Nothing"),
+            Timeout => write!(f, "Timeout"),
+            SendAction(action) => write!(f, "SendAction({})", action),
+            SendActionBeforeTimeout(action) => {
                 write!(f, "SendActionBeforeTimeout({})", action)
             }
-            KeyHandlerAction::SendActionOnTimeout(action) => {
+            SendActionOnTimeout(action) => {
                 write!(f, "SendActionOnTimeout({})", action)
             }
+            SendActionBeforeTimeoutAndOnTimeout { before, on } => {
+                write!(
+                    f,
+                    "SendActionBeforeTimeoutAndOnTimeout(before: {}, on: {})",
+                    before, on
+                )
+            }
+            SendActionsOnTimeout(actions) => write!(f, "SendActionsOnTimeout({})", actions),
         }
     }
 }
 
-impl<T> KeypressCallback for KeypressHandler<T>
+impl<A, T> KeypressCallback for KeypressHandler<A, T>
 where
-    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display,
+    A: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
+    T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
 {
     fn handle(&mut self, key: u32, modifiers: &[Modifier]) -> HookAction {
         let modifier = if modifiers.contains(&ModAlt) {
@@ -160,7 +239,7 @@ where
             return PassOn;
         }
 
-        let key_press = KeyPress::new(Key::from_u8(key as u8), modifier);
+        let key_press = KeyPress::Mod(Key::from_u8(key as u8), modifier);
         let (mutex, condvar) = &*self.state;
         let handler_action = {
             let mut state = mutex.lock().unwrap();
@@ -170,10 +249,11 @@ where
 
         if let Some(action) = handler_action {
             match action {
-                KeyHandlerAction::Timeout => {
-                    println!("{}", action);
+                Nothing => println!("Nothing"),
+                Timeout => {
                     let mut state = mutex.lock().unwrap();
                     state.timeout_action = None;
+                    state.timeout_actions = None;
 
                     if state.timeout_running {
                         state.timeout_retrigger = true;
@@ -186,29 +266,25 @@ where
 
                     return Suppress;
                 }
-                KeyHandlerAction::SendAction(ref action) => {
-                    println!("{}", action);
+                SendAction(ref action) => {
                     let mut state = mutex.lock().unwrap();
                     state.timeout_cancelled = true;
                     state.timeout_action = None;
+                    state.timeout_actions = None;
                     state.mapping_trie.reset();
-                    let _ = state.sender.send(action.clone());
-
-                    if let Action::System(SystemActionType::Bye) = action {
-                        state.quitting = true;
-                        KeyboardHookManager::stop_windows_loop();
-                    }
+                    state.sender.send(Event::Single(action.clone())).unwrap();
 
                     condvar.notify_one();
                     drop(state);
 
                     return Suppress;
                 }
-                KeyHandlerAction::SendActionBeforeTimeout(ref action) => {
-                    println!("{}", action);
+                SendActionBeforeTimeout(ref action) => {
                     let mut state = mutex.lock().unwrap();
-                    state.sender.send(action.clone()).unwrap();
+                    state.sender.send(Event::Single(action.clone())).unwrap();
+
                     state.timeout_action = None;
+                    state.timeout_actions = None;
 
                     if state.timeout_running {
                         state.timeout_retrigger = true;
@@ -221,10 +297,43 @@ where
 
                     return Suppress;
                 }
-                KeyHandlerAction::SendActionOnTimeout(ref action) => {
-                    println!("{}", action);
+                SendActionOnTimeout(ref action) => {
                     let mut state = mutex.lock().unwrap();
                     state.timeout_action = Some(action.clone());
+                    state.timeout_actions = None;
+
+                    if state.timeout_running {
+                        state.timeout_retrigger = true;
+                        drop(state);
+                        condvar.notify_one();
+                    } else {
+                        drop(state);
+                        Self::start_timeout(Arc::clone(&self.state));
+                    }
+
+                    return Suppress;
+                }
+                SendActionsOnTimeout(ref actions) => {
+                    let mut state = mutex.lock().unwrap();
+                    state.timeout_action = None;
+                    state.timeout_actions = Some(actions.clone());
+
+                    if state.timeout_running {
+                        state.timeout_retrigger = true;
+                        drop(state);
+                        condvar.notify_one();
+                    } else {
+                        drop(state);
+                        Self::start_timeout(Arc::clone(&self.state));
+                    }
+
+                    return Suppress;
+                }
+                SendActionBeforeTimeoutAndOnTimeout { ref before, ref on } => {
+                    let mut state = mutex.lock().unwrap();
+                    state.sender.send(Event::Single(before.clone())).unwrap();
+                    state.timeout_action = None;
+                    state.timeout_actions = Some(on.clone());
 
                     if state.timeout_running {
                         state.timeout_retrigger = true;
@@ -241,7 +350,7 @@ where
         }
 
         let mut state = mutex.lock().unwrap();
-        state.timeout_action = None;
+        state.timeout_actions = None;
 
         if state.timeout_running {
             println!("Resetting.");

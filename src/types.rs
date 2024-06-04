@@ -1,11 +1,12 @@
 use crate::types::Modifier::*;
 use core::fmt;
+use core::hash::Hash;
 use std::fmt::Debug;
 use std::fmt::Display;
 
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]
 pub enum Modifier {
-    NoMod,
+    NoMod, // TODO: Remove this.
     ModAlt,
 }
 
@@ -18,66 +19,16 @@ impl Display for Modifier {
     }
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum ActionType<T>
-where
-    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
-{
-    System(SystemActionType),
-    User(T),
-}
-
-impl<T> Display for ActionType<T>
-where
-    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ActionType::System(action) => write!(f, "{}", action),
-            ActionType::User(action) => write!(f, "{}", action),
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum Action<T>
-where
-    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
-{
-    System(SystemActionType),
-    User(T, Vec<KeyPress>),
-}
-
-impl<T> Display for Action<T>
-where
-    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Action::System(action) => write!(f, "{}", action),
-            Action::User(action, _) => write!(f, "{}", action),
-        }
-    }
-}
+/// This is an event that gets emitted by the keyboard_hook.
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub struct KeyPresses(pub Vec<KeyPress>);
-
-impl KeyPresses {
-    pub fn choice(&self) -> KeyPressType {
-        KeyPressType::Choice(self.clone())
-    }
-}
-
-impl Display for KeyPresses {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let result = self
-            .0
-            .iter()
-            .map(|item| item.to_string())
-            .collect::<Vec<_>>()
-            .join(" | ");
-        write!(f, "{}", result)
-    }
+pub enum Event<A, T>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    System(SystemAction),
+    Single(A),
+    Multi(T, Vec<A>),
 }
 
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]
@@ -209,122 +160,174 @@ impl Key {
 use Key::*;
 
 #[derive(PartialEq, Eq, Clone, Hash, Debug)]
-pub struct KeyPress(Key, Modifier);
-
-impl KeyPress {
-    pub fn new(key: Key, modifier: Modifier) -> Self {
-        Self(key, modifier)
-    }
-
-    pub fn nomod(key: Key) -> Self {
-        Self(key, NoMod)
-    }
-
-    #[allow(unused)]
-    pub fn alt(key: Key) -> Self {
-        Self(key, ModAlt)
-    }
-
-    pub fn get_key(&self) -> Key {
-        self.0.clone()
-    }
+pub enum KeyPress {
+    // TODO: I think it makes more sense to remove 'NoMod' modifier from Modifier.
+    // NoMod(Key),
+    Mod(Key, Modifier),
 }
 
 impl Display for KeyPress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.1 {
-            NoMod => write!(f, "{}", self.0),
-            ModAlt => write!(f, "<{}-{}>", self.1, self.0),
+        match self {
+            // KeyPress::NoMod(key) => write!(f, "{}", key),
+            KeyPress::Mod(key, NoMod) => write!(f, "{}", key),
+            KeyPress::Mod(key, modifier) => write!(f, "<{}-{}>", modifier, key),
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Hash, Debug)]
+pub enum Behaviour<A>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    Timeout(KeyPress),
+    Action(KeyPress, A),
+    ActionOnTimeout(KeyPress, A),
+}
+
+impl<A> Behaviour<A>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    pub fn new(key: Key, modifier: Modifier) -> Self {
+        Behaviour::Timeout(KeyPress::Mod(key, modifier))
+    }
+
+    pub fn a(key: Key, modifier: Modifier, action: A) -> Self {
+        Behaviour::Action(KeyPress::Mod(key, modifier), action)
+    }
+
+    pub fn nomod(key: Key) -> Self {
+        Behaviour::Timeout(KeyPress::Mod(key, NoMod))
+    }
+
+    pub fn nomod_a(key: Key, action: A) -> Self {
+        Behaviour::Action(KeyPress::Mod(key, NoMod), action)
+    }
+
+    #[allow(unused)]
+    pub fn alt(key: Key) -> Self {
+        Behaviour::Timeout(KeyPress::Mod(key, ModAlt))
+    }
+
+    #[allow(unused)]
+    pub fn alt_a(key: Key, action: A) -> Self {
+        Behaviour::Action(KeyPress::Mod(key, ModAlt), action)
+    }
+
+    // TODO: Return the reference
+    pub fn get_key(&self) -> KeyPress {
+        match self {
+            Behaviour::Timeout(key) => key.clone(),
+            Behaviour::Action(key, _) => key.clone(),
+            Behaviour::ActionOnTimeout(key, _) => key.clone(),
+        }
+    }
+
+    pub fn get_modifier(&self) -> &Modifier {
+        match self {
+            Behaviour::Timeout(KeyPress::Mod(_, modifier)) => modifier,
+            Behaviour::Action(KeyPress::Mod(_, modifier), _) => modifier,
+            Behaviour::ActionOnTimeout(KeyPress::Mod(_, modifier), _) => modifier,
+        }
+    }
+}
+
+impl<A> Display for Behaviour<A>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Behaviour::Timeout(key) => write!(f, "NoActionMapping: {}", key),
+            Behaviour::Action(key, action_type) => {
+                write!(f, "ActionMapping: {} -> {}", key, action_type)
+            }
+            Behaviour::ActionOnTimeout(key, action_type) => {
+                write!(f, "ActionOnTimeoutMapping: {} -> {}", key, action_type)
+            }
         }
     }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
-pub enum KeyPressType {
-    Single(KeyPress),
-    Choice(KeyPresses),
+pub struct Behaviours<A>(pub Vec<Behaviour<A>>)
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send;
+
+impl<A> Behaviours<A>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    pub fn get_mapping(&self, key: &KeyPress) -> Option<&Behaviour<A>> {
+        self.0.iter().find(|mapping| mapping.get_key() == *key)
+    }
+
+    // pub fn get_action_type(&self, key: KeyPress) -> Option<&Action<A, T>> {
+    //     for key_mapping in self.0 {
+    //         match key_mapping {
+    //             KeyPressMapping::Action(k, a) if k == key => Some(a),
+    //             _ => continue,
+    //         };
+    //     }
+    //
+    //     None
+    // }
 }
 
-impl Display for KeyPressType {
+impl<A> Display for Behaviours<A>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let result = self
+            .0
+            .iter()
+            .map(|item| item.to_string())
+            .collect::<Vec<_>>()
+            .join(" | ");
+        write!(f, "{}", result)
+    }
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub enum Mapping<A, T>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
+    Single(Behaviour<A>),
+    Choice(Behaviours<A>, T),
+}
+
+impl<A, T> Display for Mapping<A, T>
+where
+    A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+    T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Single(key) => write!(f, "{}", key),
-            Choice(keys) => write!(f, "{}", keys),
+            Choice(keys, tag) => write!(f, "({}): {}", tag, keys),
         }
     }
 }
-use KeyPressType::*;
-
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum Mapping<T>
-where
-    T: Clone + PartialEq + Eq + Debug + Display + Sync + Send,
-{
-    Timeout(KeyPressType),
-    Action(KeyPressType, ActionMapping<T>),
-}
-
 use Mapping::*;
 
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum ActionMapping<T>
-where
-    T: Clone + PartialEq + Eq + Debug + Display + Sync + Send,
-{
-    NoTimeout(ActionType<T>),
-    TimeoutAfterAction(ActionType<T>),
-    TimeoutBeforeAction(ActionType<T>),
-}
-
-use ActionMapping::*;
-
-impl<T> Mapping<T>
-where
-    T: Clone + PartialEq + Eq + Debug + Display + Sync + Send,
-{
-    pub fn get_key(&self) -> &KeyPressType {
-        match self {
-            Timeout(key) => key,
-            Action(key, action_mapping) => match action_mapping {
-                NoTimeout(_) => key,
-                TimeoutAfterAction(_) => key,
-                TimeoutBeforeAction(_) => key,
-            },
-        }
-    }
-}
-
-impl<T> Display for Mapping<T>
-where
-    T: Clone + PartialEq + Eq + Debug + Display + Sync + Send,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Timeout(key) => write!(f, "Timeout: {}", key),
-            Action(key, action_mapping) => match action_mapping {
-                NoTimeout(action_type) => write!(f, "Action: {} -> {}", key, action_type),
-                TimeoutAfterAction(action_type) => {
-                    write!(f, "TimeoutAfterAction: {} -> {}", key, action_type)
-                }
-                TimeoutBeforeAction(action) => {
-                    write!(f, "ActionAfterTimeoutKey: {} -> {}", key, action)
-                }
-            },
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum SystemActionType {
+#[derive(PartialEq, Eq, Clone, Debug, Hash)]
+pub enum SystemAction {
     Hello,
     Bye,
 }
 
-impl Display for SystemActionType {
+impl Display for SystemAction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SystemActionType::Hello => write!(f, "Hello"),
-            SystemActionType::Bye => write!(f, "Bye"),
+            SystemAction::Hello => write!(f, "Hello"),
+            SystemAction::Bye => write!(f, "Bye"),
         }
     }
 }
+
+pub struct ShutdownAction;

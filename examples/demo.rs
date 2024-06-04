@@ -5,11 +5,14 @@ use keyboard_hook::abt;
 use keyboard_hook::key;
 use keyboard_hook::t;
 use keyboard_hook::types::Action;
-use keyboard_hook::types::ActionType::*;
+use keyboard_hook::types::Action::*;
+use keyboard_hook::types::Event;
 use keyboard_hook::types::Key::*;
 use keyboard_hook::types::Mapping;
 use keyboard_hook::types::Modifier::*;
-use keyboard_hook::types::SystemActionType;
+use keyboard_hook::types::ShutdownAction;
+use keyboard_hook::types::SystemAction;
+use keyboard_hook::types::SystemAction::*;
 use keyboard_hook::ActionHandler;
 use keyboard_hook::KeyboardHook;
 use std::fmt::Debug;
@@ -21,6 +24,10 @@ enum MyActions {
     ToggleChannels,
     Volume,
 }
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+#[allow(dead_code)]
+enum MyTags {}
 
 use MyActions::*;
 
@@ -35,20 +42,23 @@ impl fmt::Display for MyActions {
 
 struct Handler;
 
-impl ActionHandler<MyActions> for Handler {
-    fn handle(&self, receiver: mpsc::Receiver<Action<MyActions>>) {
+impl ActionHandler<MyActions, MyTags> for Handler {
+    fn handle(
+        &self,
+        receiver: mpsc::Receiver<Event<MyActions, MyTags>>,
+        sender: mpsc::Sender<ShutdownAction>,
+    ) {
         for action in receiver {
             match action {
-                Action::System(action) => match action {
-                    SystemActionType::Hello => {
-                        println!("Keyboard hooked. Press Alt+A -> E -> X -> I -> T to exit.")
-                    }
-                    SystemActionType::Bye => println!("Exiting..."),
-                },
-                Action::User(action, keys) => match action {
-                    ToggleChannels => println!("ToggleChannels: {:?}", keys),
-                    Volume => println!("Volume: {:?}", keys),
-                },
+                Event::System(SystemAction::Hello) => {
+                    println!("Keyboard hooked. Press Alt+A -> E -> X -> I -> T to exit.")
+                }
+                Event::System(SystemAction::Bye) => println!("Exiting..."),
+                Event::Single(Bye) => sender.send(ShutdownAction).unwrap(),
+                Event::Single(action) => println!("Received action: {}", action),
+                Event::Multi(tag, actions) => {
+                    println!("Received actions ({:?}): {:?}", tag, actions)
+                }
             }
         }
     }
@@ -61,13 +71,19 @@ fn define_mappings() -> Vec<Vec<Mapping<MyActions>>> {
             t!(KeyE),
             t!(KeyX),
             t!(KeyI),
-            a!(KeyT, System(SystemActionType::Bye)),
+            a!(KeyT, System(SystemAction::Bye)),
         ],
         vec![
             t!(KeyA, ModAlt),
-            aat!(
-                [key!(Key1), key!(Key2), key!(Key3), key!(Key4), key!(Key5)],
-                User(ToggleChannels)
+            tm!(
+                [
+                    key_a!(Key1, ToggleChannel1),
+                    key_a!(Key2, ToggleChannel2),
+                    key_a!(Key3, ToggleChannel3),
+                    key_a!(Key4, ToggleChannel4),
+                    key_a!(Key5, ToggleChannel5)
+                ],
+                ToggleChannels
             ),
         ],
         vec![
