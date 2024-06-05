@@ -172,7 +172,66 @@ where
         }
     }
 
-    pub fn find_mapping(&mut self, key: &KeyPress) -> Option<KeyHandlerAction<A, T>> {
+    pub fn find_mapping(&self, key: &KeyPress) -> Option<&Mapping<A, T>> {
+        let mut node = &self.root;
+
+        for key_press in &self.buffer {
+            let key = key_press;
+
+            match node {
+                Root(next) | OneOff(_, next) => {
+                    if !next.contains_key(key) {
+                        return None;
+                    } else {
+                        node = &next.get(key).unwrap();
+                    }
+                }
+                Repeatable(_, repeatable_set, next) => {
+                    if !repeatable_set.contains(key) {
+                        match next.get(key) {
+                            None => {
+                                return None;
+                            }
+                            Some(next_node) => {
+                                node = next_node;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        match node {
+            Root(next) | OneOff(_, next) => match next.get(key) {
+                None => None,
+                Some(keys) => match keys {
+                    Root(_) => None,
+                    OneOff(mapping, _) | Repeatable(mapping, _, _) => Some(mapping),
+                },
+            },
+            Repeatable(mapping, repeatable_set, next) => {
+                if repeatable_set.contains(key) {
+                    return Some(mapping);
+                }
+
+                match next.get(key) {
+                    None => {
+                        self.reset();
+                        None
+                    }
+                    Some(next_node) => match next_node {
+                        Root(_) => {
+                            self.reset();
+                            None
+                        }
+                        OneOff(mapping, _) | Repeatable(mapping, _, _) => Some(mapping),
+                    },
+                }
+            }
+        }
+    }
+
+    pub fn chuj(&self, key: &KeyPress) -> Option<KeyHandlerAction<A, T>> {
         let mut node = &self.root;
 
         for key_press in &self.buffer {
