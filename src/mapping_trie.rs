@@ -173,7 +173,7 @@ where
 mod tests {
     use super::*;
     use crate::types::Key::*;
-    // use crate::types::Modifier::ModAlt;
+    use crate::types::Modifier::ModAlt;
     use crate::*;
     use key_handler::Buffers;
     use key_handler::KeyHandlerAction;
@@ -197,6 +197,8 @@ mod tests {
         VolumeUp,
         VolumeDown,
     }
+
+    use TestAction::*;
 
     impl Display for TestAction {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -229,11 +231,6 @@ mod tests {
 
     // use TestAction::*;
     //
-    // macro_rules! timeout {
-    //     () => {
-    //         $crate::key_handler::KeyHandlerAction::Timeout
-    //     };
-    // }
     //
     // macro_rules! action {
     //     ($action:expr, [$($keypresses:expr),* $(,)?]) => {
@@ -254,9 +251,30 @@ mod tests {
     // }
 
     #[rstest]
-    #[case(m!([[t!(KeyA)]]), &[key!(KeyX)], Nothing)]
-    // #[case(m!([[t!(KeyA, ModAlt)]]), &[alt!(KeyA)], Some(timeout!()))]
-    // #[case(m!([[a!(KeyA, ModAlt, u!(VolumeUp))]]), &[alt!(KeyA)], Some(action!(VolumeUp, [alt!(KeyA)])))]
+    // Should invoke a timeout for a key without a modifier.
+    #[case(m!([[t!(KeyA)]]), &[key!(KeyA)], &[Timeout])]
+    // Should do nothing if the key doesn't match.
+    #[case(m!([[t!(KeyA)]]), &[key!(KeyX)], &[Nothing])]
+    // Should invoke a timeout for a key with a modifier.
+    #[case(m!([[t!(KeyA, ModAlt)]]), &[alt!(KeyA)], &[Timeout])]
+    // Should do nothing if the modifier doesn't match.
+    #[case(m!([[t!(KeyA, ModAlt)]]), &[key!(KeyA)], &[Nothing])]
+    // Should invoke an immediate action for a key without a modifier.
+    #[case(m!([[a!(KeyA, VolumeUp)]]), &[key!(KeyA)], &[Action(VolumeUp)])]
+    // Should invoke an immediate action for a key with a modifier.
+    #[case(m!([[a!(KeyA, ModAlt, VolumeUp)]]), &[alt!(KeyA)], &[Action(VolumeUp)])]
+    // Should invoke an action on the timeout for a key without a modifier.
+    #[case(m!([[aot!(KeyA, VolumeUp)]]), &[key!(KeyA)], &[ActionOnTimeout(VolumeUp)])]
+    // Should invoke an action on the timeout for a key with a modifier.
+    #[case(m!([[aot!(KeyA, ModAlt, VolumeUp)]]), &[alt!(KeyA)], &[ActionOnTimeout(VolumeUp)])]
+    // Should do nothing if the first key doesn't match the first one in the mapping sequence.
+    #[case(m!([[t!(KeyA), a!(KeyB, VolumeUp)]]), &[key!(KeyB)], &[Nothing])]
+    // Should invoke an immediate action if the sequence of keys match and the last key is mapped
+    // to an action.
+    #[case(m!([[t!(KeyA), a!(KeyB, VolumeUp)]]), &[key!(KeyA), key!(KeyB)], &[Timeout, Action(VolumeUp)])]
+    // Should invoke the first action and ignore the second, because action resets the sequence.
+    #[case(m!([[a!(KeyA, VolumeUp), a!(KeyB, VolumeDown)]]), &[key!(KeyA), key!(KeyB)], &[Action(VolumeUp), Nothing])]
+    // Should invoke an action on the timeout for a key with a modifier.
     // #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(KeyA), key!(Key1)], Some(timeout!()))]
     // #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(Key2)], None)]
     // #[case(m!([[t!(KeyA), t!(Key1), a!(Key2, u!(VolumeUp))]]), &[key!(KeyA), key!(Key2), key!(Key2)], None)]
@@ -285,16 +303,16 @@ mod tests {
     fn should_match_keys_to_mappings(
         #[case] mappings: Vec<Vec<Mapping<TestAction, TestTag>>>,
         #[case] keypresses: &[KeyPress],
-        #[case] expected: KeyHandlerAction<TestAction, TestTag>,
+        #[case] expected: &[KeyHandlerAction<TestAction, TestTag>],
     ) {
         // Given
         let trie = MappingTrie::from_mappings(&mappings);
-        let mut result = KeyHandlerAction::Nothing;
+        let mut result = vec![];
         let mut buffers = Buffers::new();
 
         // When
         for key in keypresses {
-            result = find_mapping(key, &trie, &mut buffers);
+            result.push(find_mapping(key, &trie, &mut buffers));
         }
 
         // Thre asd

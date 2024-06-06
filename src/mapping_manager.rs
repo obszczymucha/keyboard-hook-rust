@@ -82,7 +82,14 @@ where
 
     if let Some(m) = mapping {
         buffers.key_buffer.push(key_press.clone());
-        to_handler_action(m, key_press, &mut buffers.actions_on_timeout)
+        let action = to_handler_action(m, key_press, &mut buffers.actions_on_timeout);
+
+        if let Action(_) = action {
+            buffers.key_buffer.clear();
+            buffers.actions_on_timeout.clear();
+        }
+
+        action
     } else {
         KeyHandlerAction::Nothing
     }
@@ -100,28 +107,26 @@ where
     match mapping {
         Single(behaviour) => match behaviour {
             Behaviour::Timeout(_) => Timeout,
-            Behaviour::Action(_, action_type) => SendAction(action_type.clone()),
-            Behaviour::ActionOnTimeout(_, action_type) => SendActionOnTimeout(action_type.clone()),
+            Behaviour::Action(_, action_type) => Action(action_type.clone()),
+            Behaviour::ActionOnTimeout(_, action_type) => ActionOnTimeout(action_type.clone()),
         },
         Choice(behaviours, tag) => {
             match behaviours.get_mapping(key) {
                 Some(mapping) => match (mapping, actions.get_tag()) {
                     (Behaviour::Timeout(_), None) => Timeout,
-                    (Behaviour::Timeout(_), Some(_)) => SendActionsOnTimeout(actions.clone()),
-                    (Behaviour::Action(_, action), Some(_)) => {
-                        SendActionBeforeTimeout(action.clone())
-                    }
-                    (Behaviour::Action(_, action), None) => SendActionBeforeTimeoutAndOnTimeout {
+                    (Behaviour::Timeout(_), Some(_)) => ActionsOnTimeout(actions.clone()),
+                    (Behaviour::Action(_, action), Some(_)) => ActionBeforeTimeout(action.clone()),
+                    (Behaviour::Action(_, action), None) => ActionBeforeAndOnTimeout {
                         before: action.clone(),
                         on: actions.clone(),
                     },
                     (Behaviour::ActionOnTimeout(_, action), None) => {
                         actions.push(action.clone(), tag.clone());
-                        SendActionOnTimeout(action.clone())
+                        ActionOnTimeout(action.clone())
                     }
                     (Behaviour::ActionOnTimeout(_, action), Some(_)) => {
                         actions.push_action(action.clone());
-                        SendActionsOnTimeout(actions.clone())
+                        ActionsOnTimeout(actions.clone())
                     }
                 },
                 None => Nothing, // Should never happen.

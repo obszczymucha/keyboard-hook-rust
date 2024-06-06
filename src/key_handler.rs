@@ -174,11 +174,11 @@ where
 {
     Nothing, // TODO: Add reason for clarity.
     Timeout,
-    SendAction(A),
-    SendActionBeforeTimeout(A),
-    SendActionOnTimeout(A),
-    SendActionsOnTimeout(ActionsOnTimeout<A, T>),
-    SendActionBeforeTimeoutAndOnTimeout {
+    Action(A),
+    ActionBeforeTimeout(A),
+    ActionOnTimeout(A),
+    ActionsOnTimeout(ActionsOnTimeout<A, T>),
+    ActionBeforeAndOnTimeout {
         before: A,
         on: ActionsOnTimeout<A, T>,
     },
@@ -195,21 +195,21 @@ where
         match self {
             Nothing => write!(f, "Nothing"),
             Timeout => write!(f, "Timeout"),
-            SendAction(action) => write!(f, "SendAction({})", action),
-            SendActionBeforeTimeout(action) => {
-                write!(f, "SendActionBeforeTimeout({})", action)
+            Action(action) => write!(f, "Action({})", action),
+            ActionBeforeTimeout(action) => {
+                write!(f, "ActionBeforeTimeout({})", action)
             }
-            SendActionOnTimeout(action) => {
-                write!(f, "SendActionOnTimeout({})", action)
+            ActionOnTimeout(action) => {
+                write!(f, "ActionOnTimeout({})", action)
             }
-            SendActionBeforeTimeoutAndOnTimeout { before, on } => {
+            ActionBeforeAndOnTimeout { before, on } => {
                 write!(
                     f,
-                    "SendActionBeforeTimeoutAndOnTimeout(before: {}, on: {})",
+                    "ActionBeforeAndOnTimeout(before: {}, on: {})",
                     before, on
                 )
             }
-            SendActionsOnTimeout(actions) => write!(f, "SendActionsOnTimeout({})", actions),
+            ActionsOnTimeout(actions) => write!(f, "ActionsOnTimeout({})", actions),
         }
     }
 }
@@ -264,7 +264,7 @@ where
 
                 return Suppress;
             }
-            SendAction(ref action) => {
+            Action(ref action) => {
                 let mut state = mutex.lock().unwrap();
                 state.timeout_cancelled = true;
                 state.timeout_action = None;
@@ -277,7 +277,7 @@ where
 
                 return Suppress;
             }
-            SendActionBeforeTimeout(ref action) => {
+            ActionBeforeTimeout(ref action) => {
                 let mut state = mutex.lock().unwrap();
                 state.sender.send(Event::Single(action.clone())).unwrap();
 
@@ -295,7 +295,7 @@ where
 
                 return Suppress;
             }
-            SendActionOnTimeout(ref action) => {
+            ActionOnTimeout(ref action) => {
                 let mut state = mutex.lock().unwrap();
                 state.timeout_action = Some(action.clone());
                 state.buffers.actions_on_timeout.clear();
@@ -311,7 +311,7 @@ where
 
                 return Suppress;
             }
-            SendActionsOnTimeout(_) => {
+            ActionsOnTimeout(_) => {
                 let mut state = mutex.lock().unwrap();
                 state.timeout_action = None;
 
@@ -326,7 +326,7 @@ where
 
                 return Suppress;
             }
-            SendActionBeforeTimeoutAndOnTimeout { ref before, .. } => {
+            ActionBeforeAndOnTimeout { ref before, .. } => {
                 let mut state = mutex.lock().unwrap();
                 state.sender.send(Event::Single(before.clone())).unwrap();
                 state.timeout_action = None;

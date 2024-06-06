@@ -73,7 +73,7 @@ impl KeyboardHookManager {
             }
 
             self.hook = Some(hook);
-            sender.send(Event::System(Hello)).unwrap();
+            sender.send(Event::System(KeyboardHooked)).unwrap();
             Self::start_windows_loop();
             Ok(())
         }

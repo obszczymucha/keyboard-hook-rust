@@ -1,12 +1,13 @@
 use core::fmt;
 use keyboard_hook::a;
+use keyboard_hook::aot;
 use keyboard_hook::t;
 use keyboard_hook::types::Event;
 use keyboard_hook::types::Key::*;
 use keyboard_hook::types::Mapping;
 use keyboard_hook::types::Modifier::*;
-use keyboard_hook::types::ShutdownAction;
 use keyboard_hook::types::SystemAction;
+use keyboard_hook::types::TerminateHook;
 use keyboard_hook::ActionHandler;
 use keyboard_hook::KeyboardHook;
 use std::fmt::Debug;
@@ -18,7 +19,7 @@ use std::sync::mpsc;
 enum MyActions {
     ToggleChannels,
     Volume,
-    StopHook,
+    Terminate,
 }
 
 use MyActions::*;
@@ -28,7 +29,7 @@ impl Display for MyActions {
         match self {
             MyActions::ToggleChannels => write!(f, "ToggleChannels"),
             MyActions::Volume => write!(f, "Volume"),
-            MyActions::StopHook => write!(f, "StopHook"),
+            MyActions::Terminate => write!(f, "OnShutdown"),
         }
     }
 }
@@ -49,15 +50,15 @@ impl ActionHandler<MyActions, MyTags> for Handler {
     fn handle(
         &self,
         receiver: mpsc::Receiver<Event<MyActions, MyTags>>,
-        sender: mpsc::Sender<ShutdownAction>,
+        sender: mpsc::Sender<TerminateHook>,
     ) {
         for action in receiver {
             match action {
-                Event::System(SystemAction::Hello) => {
+                Event::System(SystemAction::KeyboardHooked) => {
                     println!("Keyboard hooked. Press Alt+A -> E -> X -> I -> T to exit.")
                 }
-                Event::System(SystemAction::Bye) => println!("Exiting..."),
-                Event::Single(StopHook) => sender.send(ShutdownAction).unwrap(),
+                Event::System(SystemAction::KeyboardUnhooked) => println!("Exiting..."),
+                Event::Single(Terminate) => sender.send(TerminateHook).unwrap(),
                 Event::Single(action) => println!("Received action: {}", action),
                 Event::Multi(tag, actions) => {
                     println!("Received actions ({:?}): {:?}", tag, actions)
@@ -69,12 +70,18 @@ impl ActionHandler<MyActions, MyTags> for Handler {
 
 fn define_mappings() -> Vec<Vec<Mapping<MyActions, MyTags>>> {
     vec![
+        // Alt+A -> E -> X -> I -> T
         vec![
             t!(KeyA, ModAlt),
             t!(KeyE),
             t!(KeyX),
             t!(KeyI),
-            a!(KeyT, StopHook),
+            a!(KeyT, Terminate), // Immediate action.
+        ],
+        // Alt+A -> Q
+        vec![
+            t!(KeyA, ModAlt),
+            aot!(KeyQ, Terminate), // Action on timeout.
         ],
         // vec![
         //     t!(KeyA, ModAlt),

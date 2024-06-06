@@ -41,12 +41,21 @@ macro_rules! aot {
             $crate::types::KeyPress::Mod($key, $crate::types::Modifier::NoMod),
             $action,
         ))
-    }; // ([$($behaviours:expr),* $(,)?], $action:expr) => {
-       //     Mapping::Single($crate::types::Behaviour::ActionOnTimeout(
-       //         $crate::types::KeyPress::Mod($key, $crate::types::Modifier::NoMod),
-       //         $action,
-       //     ))
-       // };
+    };
+
+    ($key:expr, $modifier:expr, $action:expr) => {
+        Mapping::Single($crate::types::Behaviour::ActionOnTimeout(
+            $crate::types::KeyPress::Mod($key, $modifier),
+            $action,
+        ))
+    };
+
+    ([$($behaviours:expr),* $(,)?], $action:expr) => {
+        Mapping::Single($crate::types::Behaviour::ActionOnTimeout(
+            $crate::types::KeyPress::Mod($key, $crate::types::Modifier::NoMod),
+            $action,
+        ))
+    };
 }
 
 // #[macro_export]

@@ -317,17 +317,17 @@ use Mapping::*;
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 pub enum SystemAction {
-    Hello,
-    Bye,
+    KeyboardHooked,
+    KeyboardUnhooked,
 }
 
 impl Display for SystemAction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SystemAction::Hello => write!(f, "Hello"),
-            SystemAction::Bye => write!(f, "Bye"),
+            SystemAction::KeyboardHooked => write!(f, "KeyboardHooked"),
+            SystemAction::KeyboardUnhooked => write!(f, "ShuttingDown"),
         }
     }
 }
 
-pub struct ShutdownAction;
+pub struct TerminateHook;
