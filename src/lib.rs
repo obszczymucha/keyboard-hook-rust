@@ -1,6 +1,8 @@
 pub mod action_handler;
 mod key_handler;
+mod keypress_buffer;
 pub mod macros;
+mod mapping_manager;
 mod mapping_trie;
 pub mod types;
 mod windows;
@@ -57,21 +59,19 @@ where
                 tx.clone(),
                 MappingTrie::from_mappings(&mappings),
             ));
+
             manager.hook(tx.clone(), handler)
         });
 
         let shutdown_handle = thread::spawn(move || {
-            for action in shutdown_rx {
-                match action {
-                    ShutdownAction => {
-                        KeyboardHookManager::stop_windows_loop();
-                        break;
-                    }
+            shutdown_rx.into_iter().for_each(|action| match action {
+                ShutdownAction => {
+                    KeyboardHookManager::stop_windows_loop();
                 }
-            }
+            });
         });
 
-        producer_handle.join().unwrap();
+        let _ = producer_handle.join().unwrap();
         shutdown_handle.join().unwrap();
         consumer_handle.join().unwrap();
 
