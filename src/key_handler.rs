@@ -1,6 +1,6 @@
 use crate::keypress_buffer::KeyPressBuffer;
 use crate::mapping_manager::find_mapping;
-use crate::mapping_manager::ActionsOnTimeout;
+use crate::mapping_manager::Actions;
 use crate::mapping_trie::MappingTrie;
 use crate::types::Key;
 use crate::types::Modifier;
@@ -23,7 +23,7 @@ where
     T: PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
 {
     pub key_buffer: KeyPressBuffer,
-    pub actions_on_timeout: ActionsOnTimeout<A, T>,
+    pub actions_on_timeout: Actions<A, T>,
 }
 
 impl<A, T> Buffers<A, T>
@@ -34,7 +34,7 @@ where
     pub fn new() -> Self {
         Self {
             key_buffer: KeyPressBuffer::new(),
-            actions_on_timeout: ActionsOnTimeout::new(),
+            actions_on_timeout: Actions::empty(),
         }
     }
 }
@@ -177,10 +177,10 @@ where
     Action(A),
     ActionBeforeTimeout(A),
     ActionOnTimeout(A),
-    ActionsOnTimeout(ActionsOnTimeout<A, T>),
-    ActionBeforeAndOnTimeout {
+    ActionsOnTimeout(Actions<A, T>),
+    ActionsBeforeAndOnTimeout {
         before: A,
-        on: ActionsOnTimeout<A, T>,
+        on: Actions<A, T>,
     },
 }
 
@@ -202,7 +202,7 @@ where
             ActionOnTimeout(action) => {
                 write!(f, "ActionOnTimeout({})", action)
             }
-            ActionBeforeAndOnTimeout { before, on } => {
+            ActionsBeforeAndOnTimeout { before, on } => {
                 write!(
                     f,
                     "ActionBeforeAndOnTimeout(before: {}, on: {})",
@@ -326,7 +326,7 @@ where
 
                 return Suppress;
             }
-            ActionBeforeAndOnTimeout { ref before, .. } => {
+            ActionsBeforeAndOnTimeout { ref before, .. } => {
                 let mut state = mutex.lock().unwrap();
                 state.sender.send(Event::Single(before.clone())).unwrap();
                 state.timeout_action = None;

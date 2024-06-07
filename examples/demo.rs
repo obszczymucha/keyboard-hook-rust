@@ -1,6 +1,9 @@
 use core::fmt;
 use keyboard_hook::a;
 use keyboard_hook::aot;
+use keyboard_hook::c;
+use keyboard_hook::key_a;
+use keyboard_hook::key_aot;
 use keyboard_hook::t;
 use keyboard_hook::types::Event;
 use keyboard_hook::types::Key::*;
@@ -17,9 +20,14 @@ use std::sync::mpsc;
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 #[allow(dead_code)]
 enum MyActions {
-    ToggleChannels,
-    Volume,
-    Terminate,
+    VolumeUp,
+    VolumeDown,
+    ToggleChannel1,
+    ToggleChannel2,
+    ToggleChannel3,
+    ToggleChannel4,
+    ToggleChannel5,
+    Exit,
 }
 
 use MyActions::*;
@@ -27,16 +35,26 @@ use MyActions::*;
 impl Display for MyActions {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            MyActions::ToggleChannels => write!(f, "ToggleChannels"),
-            MyActions::Volume => write!(f, "Volume"),
-            MyActions::Terminate => write!(f, "OnShutdown"),
+            MyActions::VolumeUp => write!(f, "VolumeUp"),
+            MyActions::VolumeDown => write!(f, "VolumeDown"),
+            MyActions::ToggleChannel1 => write!(f, "ToggleChannel1"),
+            MyActions::ToggleChannel2 => write!(f, "ToggleChannel2"),
+            MyActions::ToggleChannel3 => write!(f, "ToggleChannel3"),
+            MyActions::ToggleChannel4 => write!(f, "ToggleChannel4"),
+            MyActions::ToggleChannel5 => write!(f, "ToggleChannel5"),
+            MyActions::Exit => write!(f, "Exit"),
         }
     }
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 #[allow(dead_code)]
-enum MyTags {}
+enum MyTags {
+    ToggleChannels,
+    Volume,
+}
+
+use MyTags::*;
 
 impl Display for MyTags {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -58,7 +76,7 @@ impl ActionHandler<MyActions, MyTags> for Handler {
                     println!("Keyboard hooked. Press Alt+A -> E -> X -> I -> T to exit.")
                 }
                 Event::System(SystemAction::KeyboardUnhooked) => println!("Exiting..."),
-                Event::Single(Terminate) => sender.send(TerminateHook).unwrap(),
+                Event::Single(Exit) => sender.send(TerminateHook).unwrap(),
                 Event::Single(action) => println!("Received action: {}", action),
                 Event::Multi(tag, actions) => {
                     println!("Received actions ({:?}): {:?}", tag, actions)
@@ -76,30 +94,32 @@ fn define_mappings() -> Vec<Vec<Mapping<MyActions, MyTags>>> {
             t!(KeyE),
             t!(KeyX),
             t!(KeyI),
-            a!(KeyT, Terminate), // Immediate action.
+            a!(KeyT, Exit), // Immediate action.
         ],
         // Alt+A -> Q
         vec![
             t!(KeyA, ModAlt),
-            aot!(KeyQ, Terminate), // Action on timeout.
+            aot!(KeyQ, Exit), // Action on timeout.
         ],
-        // vec![
-        //     t!(KeyA, ModAlt),
-        //     tm!(
-        //         [
-        //             key_a!(Key1, ToggleChannel1),
-        //             key_a!(Key2, ToggleChannel2),
-        //             key_a!(Key3, ToggleChannel3),
-        //             key_a!(Key4, ToggleChannel4),
-        //             key_a!(Key5, ToggleChannel5)
-        //         ],
-        //         ToggleChannels
-        //     ),
-        // ],
-        // vec![
-        //     t!(KeyA, ModAlt),
-        //     abt!([key!(KeyJ), key!(KeyK)], User(Volume)),
-        // ],
+        // Alt+A -> [12345]*
+        vec![
+            t!(KeyA, ModAlt),
+            c!(
+                [
+                    key_aot!(Key1, ToggleChannel1),
+                    key_aot!(Key2, ToggleChannel2),
+                    key_aot!(Key3, ToggleChannel3),
+                    key_aot!(Key4, ToggleChannel4),
+                    key_aot!(Key5, ToggleChannel5)
+                ],
+                ToggleChannels
+            ),
+        ],
+        // Alt+A -> [JK]*
+        vec![
+            t!(KeyA, ModAlt),
+            c!([key_a!(KeyJ, VolumeDown), key_a!(KeyK, VolumeUp)], Volume),
+        ],
     ]
 }
 

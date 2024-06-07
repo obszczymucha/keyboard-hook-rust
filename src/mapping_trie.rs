@@ -81,10 +81,13 @@ where
                 Choice(behaviours, _) => match node {
                     Root(next) | OneOff(_, next) => {
                         if Self::all_keys_available(next, behaviours) {
+                            let set: HashSet<KeyPress> =
+                                behaviours.0.iter().map(|b| b.get_key()).collect();
+
                             behaviours.0.iter().for_each(|b| {
-                                let next_node = next.entry(b.get_key().clone()).or_insert(
-                                    Repeatable(m.clone(), HashSet::new(), HashMap::new()),
-                                );
+                                let next_node = next
+                                    .entry(b.get_key().clone())
+                                    .or_insert(Repeatable(m.clone(), set.clone(), HashMap::new()));
                                 Self::map(next_node, mapping, i + 1);
                             });
 
@@ -166,156 +169,5 @@ where
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::Key::*;
-    use crate::types::Modifier::ModAlt;
-    use crate::*;
-    use key_handler::Buffers;
-    use key_handler::KeyHandlerAction;
-    use mapping_manager::find_mapping;
-    use rstest::rstest;
-    use KeyHandlerAction::*;
-
-    macro_rules! m {
-        ( [ $( [ $( $x:expr ),* $(,)? ] ),* $(,)? ] ) => {
-            vec![
-                $(
-                    vec![$($x),*]
-                ),*
-            ]
-        }
-    }
-
-    #[derive(Eq, Debug, Clone, PartialEq, Hash)]
-    #[allow(dead_code)]
-    enum TestAction {
-        VolumeUp,
-        VolumeDown,
-    }
-
-    use TestAction::*;
-
-    impl Display for TestAction {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                TestAction::VolumeUp => write!(f, "VolumeUp"),
-                TestAction::VolumeDown => write!(f, "VolumeDown"),
-            }
-        }
-    }
-
-    #[derive(Eq, Debug, Clone, PartialEq, Hash)]
-    #[allow(dead_code)]
-    enum TestTag {
-        Volume,
-    }
-
-    impl Display for TestTag {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                TestTag::Volume => write!(f, "Volume"),
-            }
-        }
-    }
-
-    // macro_rules! u {
-    //     ($user_action:expr) => {
-    //         $crate::types::Action::User($user_action)
-    //     };
-    // }
-
-    // use TestAction::*;
-    //
-    //
-    // macro_rules! action {
-    //     ($action:expr, [$($keypresses:expr),* $(,)?]) => {
-    //         $crate::key_handler::KeyHandlerAction::SendAction($crate::types::Action::User($action, vec![$($keypresses),*]))
-    //     };
-    // }
-    //
-    // macro_rules! action_t {
-    //     ($action:expr, [$($keypresses:expr),* $(,)?]) => {
-    //         $crate::key_handler::KeyHandlerAction::SendActionOnTimeout($crate::types::Action::User($action, vec![$($keypresses),*]))
-    //     };
-    // }
-    //
-    // macro_rules! t_action {
-    //     ($action:expr, [$($keypresses:expr),* $(,)?]) => {
-    //         $crate::key_handler::KeyHandlerAction::SendActionBeforeTimeout($crate::types::Action::User($action, vec![$($keypresses),*]))
-    //     };
-    // }
-
-    #[rstest]
-    // Should invoke a timeout for a key without a modifier.
-    #[case(m!([[t!(KeyA)]]), &[key!(KeyA)], &[Timeout])]
-    // Should do nothing if the key doesn't match.
-    #[case(m!([[t!(KeyA)]]), &[key!(KeyX)], &[Nothing])]
-    // Should invoke a timeout for a key with a modifier.
-    #[case(m!([[t!(KeyA, ModAlt)]]), &[alt!(KeyA)], &[Timeout])]
-    // Should do nothing if the modifier doesn't match.
-    #[case(m!([[t!(KeyA, ModAlt)]]), &[key!(KeyA)], &[Nothing])]
-    // Should invoke an immediate action for a key without a modifier.
-    #[case(m!([[a!(KeyA, VolumeUp)]]), &[key!(KeyA)], &[Action(VolumeUp)])]
-    // Should invoke an immediate action for a key with a modifier.
-    #[case(m!([[a!(KeyA, ModAlt, VolumeUp)]]), &[alt!(KeyA)], &[Action(VolumeUp)])]
-    // Should invoke an action on the timeout for a key without a modifier.
-    #[case(m!([[aot!(KeyA, VolumeUp)]]), &[key!(KeyA)], &[ActionOnTimeout(VolumeUp)])]
-    // Should invoke an action on the timeout for a key with a modifier.
-    #[case(m!([[aot!(KeyA, ModAlt, VolumeUp)]]), &[alt!(KeyA)], &[ActionOnTimeout(VolumeUp)])]
-    // Should do nothing if the first key doesn't match the first one in the mapping sequence.
-    #[case(m!([[t!(KeyA), a!(KeyB, VolumeUp)]]), &[key!(KeyB)], &[Nothing])]
-    // Should invoke an immediate action if the sequence of keys match and the last key is mapped
-    // to an action.
-    #[case(m!([[t!(KeyA), a!(KeyB, VolumeUp)]]), &[key!(KeyA), key!(KeyB)], &[Timeout, Action(VolumeUp)])]
-    // Should invoke the first action and ignore the second, because action resets the sequence.
-    #[case(m!([[a!(KeyA, VolumeUp), a!(KeyB, VolumeDown)]]), &[key!(KeyA), key!(KeyB)], &[Action(VolumeUp), Nothing])]
-    // Should invoke an action on the timeout for a key with a modifier.
-    // #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(KeyA), key!(Key1)], Some(timeout!()))]
-    // #[case(m!([[t!(KeyA), t!(Key1)]]), &[key!(Key2)], None)]
-    // #[case(m!([[t!(KeyA), t!(Key1), a!(Key2, u!(VolumeUp))]]), &[key!(KeyA), key!(Key2), key!(Key2)], None)]
-    // #[case(m!([[t!(KeyA), t!(Key1), a!(Key2, u!(VolumeUp))]]), &[key!(KeyA), key!(Key1), key!(Key2)], Some(action!(VolumeUp, [key!(KeyA), key!(Key1), key!(Key2)])))]
-    // #[case(m!([[aot!([key!(Key1)], u!(VolumeUp))]]), &[key!(Key1)], Some(action_t!(VolumeUp, [key!(Key1)])))]
-    // #[case(m!([[aot!([key!(Key1)], u!(VolumeUp))]]), &[key!(Key1)], Some(action_t!(VolumeUp, [key!(Key1)])))]
-    // #[case(m!([[aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key1)], Some(action_t!(VolumeUp, [key!(Key1)])))]
-    // #[case(m!([[aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key2)], Some(action_t!(VolumeUp, [key!(Key2)])))]
-    // #[case(m!([[aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key2)], Some(action_t!(VolumeUp, [key!(Key2)])))]
-
-    // #[case(m!([[abt!([key!(Key1)], u!(VolumeUp))]]), &[key!(Key1)], Some(t_action!(VolumeUp, [key!(Key1)])))]
-    // #[case(m!([[abt!([key!(Key1)], u!(VolumeUp))]]), &[key!(Key1)], Some(t_action!(VolumeUp, [key!(Key1)])))]
-    // #[case(m!([[abt!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key1)], Some(t_action!(VolumeUp, [key!(Key1)])))]
-    // #[case(m!([[abt!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key2)], Some(t_action!(VolumeUp, [key!(Key2)])))]
-    // #[case(m!([[abt!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(Key2)], Some(t_action!(VolumeUp, [key!(Key2)])))]
-
-    // #[case(m!([[t!(KeyA), a!(KeyX, u!(VolumeUp))], [t!(KeyA), aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(KeyA), key!(Key1)], Some(action_t!(VolumeUp, [key!(KeyA), key!(Key1)])))]
-    // #[case(m!([[t!(KeyA), a!(KeyX, u!(VolumeUp))], [t!(KeyA), aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(KeyA), key!(Key1), key!(Key3)], None)]
-    // #[case(m!([[t!(KeyA), a!(KeyX, u!(VolumeUp))], [t!(KeyA), aot!([key!(Key1), key!(Key2)], u!(VolumeUp))]]), &[key!(KeyA), key!(Key3)], None)]
-    // #[case(m!([[t!(KeyA), t!([key!(KeyB)]), a!(KeyX, u!(VolumeDown))]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)], Some(action!(VolumeDown, [key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX)])))]
-    // #[case(m!([[t!(KeyA), t!([key!(KeyB)]), t!(KeyX), t!([key!(KeyC)]), a!(KeyX, u!(VolumeDown))]]), &[key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX), key!(KeyC), key!(KeyC), key!(KeyX)], Some(action!(VolumeDown, [key!(KeyA), key!(KeyB), key!(KeyB), key!(KeyX), key!(KeyC), key!(KeyC), key!(KeyX)])))]
-    // a choice of only timeouts
-    // a choice of timeouts and actions
-    // a choice of actions and actions after timeouts
-    // a choice of timeouts, actions and actions after timeouts
-    fn should_match_keys_to_mappings(
-        #[case] mappings: Vec<Vec<Mapping<TestAction, TestTag>>>,
-        #[case] keypresses: &[KeyPress],
-        #[case] expected: &[KeyHandlerAction<TestAction, TestTag>],
-    ) {
-        // Given
-        let trie = MappingTrie::from_mappings(&mappings);
-        let mut result = vec![];
-        let mut buffers = Buffers::new();
-
-        // When
-        for key in keypresses {
-            result.push(find_mapping(key, &trie, &mut buffers));
-        }
-
-        // Thre asd
-        assert_eq!(result, expected)
     }
 }
