@@ -136,9 +136,7 @@ where
                         .sender
                         .send(Event::Single(timeout_action.clone()))
                         .unwrap();
-                }
-
-                if let Some(tag) = state.buffers.actions_on_timeout.get_tag() {
+                } else if let Some(tag) = state.buffers.actions_on_timeout.get_tag() {
                     state
                         .sender
                         .send(Event::Multi(
@@ -284,7 +282,6 @@ where
                 state.sender.send(Event::Single(action.clone())).unwrap();
 
                 state.timeout_action = None;
-                state.buffers.actions_on_timeout.clear();
 
                 if state.timeout_running {
                     state.timeout_retrigger = true;
@@ -300,7 +297,6 @@ where
             ActionOnTimeout(ref action) => {
                 let mut state = mutex.lock().unwrap();
                 state.timeout_action = Some(action.clone());
-                state.buffers.actions_on_timeout.clear();
 
                 if state.timeout_running {
                     state.timeout_retrigger = true;

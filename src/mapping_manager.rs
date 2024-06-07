@@ -123,15 +123,7 @@ where
             match behaviours.get_mapping(key) {
                 Some(mapping) => match (mapping, actions.get_tag()) {
                     (Behaviour::Timeout(_), None) => Timeout,
-                    (Behaviour::Timeout(_), Some(_)) => {
-                        let timeout_actions = actions.get_actions_on_timeout();
-
-                        if timeout_actions.len() == 1 {
-                            ActionOnTimeout(timeout_actions.first().unwrap().clone())
-                        } else {
-                            ActionsOnTimeout(actions.clone())
-                        }
-                    }
+                    (Behaviour::Timeout(_), Some(_)) => ActionsOnTimeout(actions.clone()),
                     (Behaviour::Action(_, action), None) => ActionBeforeTimeout(action.clone()),
                     (Behaviour::Action(_, action), Some(_)) => ActionsBeforeAndOnTimeout {
                         before: action.clone(),
@@ -139,7 +131,7 @@ where
                     },
                     (Behaviour::ActionOnTimeout(_, action), None) => {
                         actions.push(action.clone(), tag.clone());
-                        ActionOnTimeout(action.clone())
+                        ActionsOnTimeout(actions.clone())
                     }
                     (Behaviour::ActionOnTimeout(_, action), Some(_)) => {
                         actions.push_action(action.clone());
@@ -266,15 +258,15 @@ mod tests {
     // Should invoke the first action and ignore the second, because action resets the sequence.
     #[case(m!([[a!(KeyA, VolUp), a!(KeyB, VolDown)]]), &[key!(KeyA), key!(KeyB)], &[Action(VolUp), Nothing])]
     // Should aggregate actions on timeout.
-    #[case(m!([[t!(KeyA), c!([key_aot!(Key1, Chan1), key_aot!(Key2, Chan2)], TogChans)]]), &[key!(KeyA), key!(Key1), key!(Key2)], &[Timeout, ActionOnTimeout(Chan1), t_actions!([Chan1, Chan2], TogChans)])]
+    #[case(m!([[t!(KeyA), c!([key_aot!(Key1, Chan1), key_aot!(Key2, Chan2)], TogChans)]]), &[key!(KeyA), key!(Key1), key!(Key2)], &[Timeout, t_actions!([Chan1], TogChans), t_actions!([Chan1, Chan2], TogChans)])]
     // Should aggregate actions on timeout (different keypress order).
-    #[case(m!([[t!(KeyA), c!([key_aot!(Key1, Chan1), key_aot!(Key2, Chan2)], TogChans)]]), &[key!(KeyA), key!(Key2), key!(Key1)], &[Timeout, ActionOnTimeout(Chan2), t_actions!([Chan2, Chan1], TogChans)])]
+    #[case(m!([[t!(KeyA), c!([key_aot!(Key1, Chan1), key_aot!(Key2, Chan2)], TogChans)]]), &[key!(KeyA), key!(Key2), key!(Key1)], &[Timeout, t_actions!([Chan2], TogChans), t_actions!([Chan2, Chan1], TogChans)])]
     // Should include repeated actions in aggregate actions on timeout.
-    #[case(m!([[t!(KeyA), c!([key_aot!(Key1, Chan1), key_aot!(Key2, Chan2)], TogChans)]]), &[key!(KeyA), key!(Key1), key!(Key2), key!(Key1)], &[Timeout, ActionOnTimeout(Chan1), t_actions!([Chan1, Chan2], TogChans), t_actions!([Chan1, Chan2, Chan1], TogChans)])]
+    #[case(m!([[t!(KeyA), c!([key_aot!(Key1, Chan1), key_aot!(Key2, Chan2)], TogChans)]]), &[key!(KeyA), key!(Key1), key!(Key2), key!(Key1)], &[Timeout, t_actions!([Chan1], TogChans), t_actions!([Chan1, Chan2], TogChans), t_actions!([Chan1, Chan2, Chan1], TogChans)])]
     // Should include timeout keys in aggregates.
-    #[case(m!([[t!(KeyA), c!([key_t!(Key1), key_aot!(Key2, Chan2)], TogChans)]]), &[key!(KeyA), key!(Key1), key!(Key2), key!(Key1)], &[Timeout, Timeout, ActionOnTimeout(Chan2), ActionOnTimeout(Chan2)])]
+    #[case(m!([[t!(KeyA), c!([key_t!(Key1), key_aot!(Key2, Chan2)], TogChans)]]), &[key!(KeyA), key!(Key1), key!(Key2), key!(Key1)], &[Timeout, Timeout, t_actions!([Chan2], TogChans), t_actions!([Chan2], TogChans)])]
     // Should invoke an immediate action and then aggregated actions on timeout.
-    #[case(m!([[t!(KeyA), c!([key_aot!(Key1, Chan1), key_aot!(Key2, Chan2), key_a!(Key3, Chan3)], TogChans)]]), &[key!(KeyA), key!(Key1), key!(Key2), key!(Key3)], &[Timeout, ActionOnTimeout(Chan1), t_actions!([Chan1, Chan2], TogChans), actions!(Chan3, [Chan1, Chan2], TogChans)])]
+    #[case(m!([[t!(KeyA), c!([key_aot!(Key1, Chan1), key_aot!(Key2, Chan2), key_a!(Key3, Chan3)], TogChans)]]), &[key!(KeyA), key!(Key1), key!(Key2), key!(Key3)], &[Timeout, t_actions!([Chan1], TogChans), t_actions!([Chan1, Chan2], TogChans), actions!(Chan3, [Chan1, Chan2], TogChans)])]
     fn should_match_keys_to_mappings(
         #[case] mappings: Vec<Vec<Mapping<TestAction, TestTag>>>,
         #[case] keypresses: &[KeyPress],
@@ -344,7 +336,7 @@ mod tests {
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyE), key!(KeyX), key!(KeyI), key!(KeyT)], &[Timeout, Timeout, Timeout, Timeout, StopTheHook])]
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyQ)], &[Timeout, ActionOnTimeout(Princess)])]
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyW)], &[Timeout, Action(Kenny)])]
-    #[case(demo_mappings(), &[alt!(KeyA), key!(Key1), key!(Key2), key!(Key3), key!(Key4), key!(Key5), key!(Key3)], &[Timeout, ActionOnTimeout(Chan1), t_actions!([Chan1, Chan2], TogChans), t_actions!([Chan1, Chan2, Chan3], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4, Chan5], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4, Chan5, Chan3], TogChans)])]
+    #[case(demo_mappings(), &[alt!(KeyA), key!(Key1), key!(Key2), key!(Key3), key!(Key4), key!(Key5), key!(Key3)], &[Timeout, t_actions!([Chan1], TogChans), t_actions!([Chan1, Chan2], TogChans), t_actions!([Chan1, Chan2, Chan3], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4, Chan5], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4, Chan5, Chan3], TogChans)])]
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyJ), key!(KeyJ), key!(KeyK), key!(KeyK), key!(KeyK)], &[Timeout, ActionBeforeTimeout(VolDown), ActionBeforeTimeout(VolDown), ActionBeforeTimeout(VolUp), ActionBeforeTimeout(VolUp), ActionBeforeTimeout(VolUp)])]
     fn should_validate_demo_mappings(
         #[case] mappings: Vec<Vec<Mapping<TestAction, TestTag>>>,
