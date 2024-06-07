@@ -6,8 +6,10 @@ use crate::types::Key;
 use crate::types::Modifier;
 use crate::types::{Event, Modifier::*};
 use crate::windows::HookAction::{PassOn, Suppress};
+use crate::windows::KeyboardHookManager;
 use crate::windows::{HookAction, KeypressCallback};
 use crate::KeyPress;
+use crate::SystemAction;
 use core::hash::Hash;
 use std::fmt::Debug;
 use std::fmt::Display;
@@ -178,10 +180,8 @@ where
     ActionBeforeTimeout(A),
     ActionOnTimeout(A),
     ActionsOnTimeout(Actions<A, T>),
-    ActionsBeforeAndOnTimeout {
-        before: A,
-        on: Actions<A, T>,
-    },
+    ActionsBeforeAndOnTimeout { before: A, on: Actions<A, T> },
+    StopTheHook,
 }
 
 use KeyHandlerAction::*;
@@ -210,6 +210,7 @@ where
                 )
             }
             ActionsOnTimeout(actions) => write!(f, "ActionsOnTimeout({})", actions),
+            StopTheHook => write!(f, "StopTheHook"),
         }
     }
 }
@@ -220,8 +221,12 @@ where
     T: 'static + PartialEq + Eq + Clone + Debug + Send + Sync + Display + Hash,
 {
     fn handle(&mut self, key: u32, modifiers: &[Modifier]) -> HookAction {
-        let modifier = if modifiers.contains(&ModAlt) {
+        let modifier = if modifiers.contains(&ModAlt) && modifiers.contains(&ModShift) {
+            ModAltShift
+        } else if modifiers.contains(&ModAlt) {
             ModAlt
+        } else if modifiers.contains(&ModShift) {
+            ModShift
         } else {
             NoMod
         };
@@ -249,9 +254,6 @@ where
             }
             Timeout => {
                 let mut state = mutex.lock().unwrap();
-                state.timeout_action = None;
-                state.buffers.key_buffer.clear();
-                state.buffers.actions_on_timeout.clear();
 
                 if state.timeout_running {
                     state.timeout_retrigger = true;
@@ -339,6 +341,17 @@ where
                     drop(state);
                     Self::start_timeout(Arc::clone(&self.state));
                 }
+
+                return Suppress;
+            }
+            StopTheHook => {
+                let mut state = mutex.lock().unwrap();
+                state.quitting = true;
+                KeyboardHookManager::stop_windows_loop();
+                state
+                    .sender
+                    .send(Event::System(SystemAction::KeyboardUnhooked))
+                    .unwrap();
 
                 return Suppress;
             }

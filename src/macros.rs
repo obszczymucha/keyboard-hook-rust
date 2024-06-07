@@ -21,6 +21,15 @@ macro_rules! c {
 }
 
 #[macro_export]
+macro_rules! shutdown {
+    ($key:expr) => {
+        Mapping::Single($crate::types::Behaviour::Shutdown(
+            $crate::types::KeyPress::Mod($key, $crate::types::Modifier::NoMod),
+        ))
+    };
+}
+
+#[macro_export]
 macro_rules! a {
     ($key:expr, $action:expr) => {
         Mapping::Single($crate::types::Behaviour::Action(

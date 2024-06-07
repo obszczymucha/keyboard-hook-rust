@@ -117,6 +117,7 @@ where
             Behaviour::Timeout(_) => Timeout,
             Behaviour::Action(_, action_type) => Action(action_type.clone()),
             Behaviour::ActionOnTimeout(_, action_type) => ActionOnTimeout(action_type.clone()),
+            Behaviour::Shutdown(_) => StopTheHook,
         },
         Choice(behaviours, tag) => {
             match behaviours.get_mapping(key) {
@@ -144,6 +145,7 @@ where
                         actions.push_action(action.clone());
                         ActionsOnTimeout(actions.clone())
                     }
+                    (Behaviour::Shutdown(_), _) => StopTheHook,
                 },
                 None => Nothing, // Should never happen.
             }
@@ -192,6 +194,8 @@ mod tests {
     #[derive(Eq, Debug, Clone, PartialEq, Hash)]
     #[allow(dead_code)]
     enum TestAction {
+        Princess,
+        Kenny,
         VolUp,
         VolDown,
         Chan1,
@@ -199,7 +203,6 @@ mod tests {
         Chan3,
         Chan4,
         Chan5,
-        Exit,
     }
 
     use TestAction::*;
@@ -207,6 +210,8 @@ mod tests {
     impl Display for TestAction {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
+                TestAction::Princess => write!(f, "Princess"),
+                TestAction::Kenny => write!(f, "Kenny"),
                 TestAction::VolUp => write!(f, "VolumeUp"),
                 TestAction::VolDown => write!(f, "VolumeDown"),
                 TestAction::Chan1 => write!(f, "ToggleChannel1"),
@@ -214,7 +219,6 @@ mod tests {
                 TestAction::Chan3 => write!(f, "ToggleChannel3"),
                 TestAction::Chan4 => write!(f, "ToggleChannel4"),
                 TestAction::Chan5 => write!(f, "ToggleChannel5"),
-                TestAction::Exit => write!(f, "Exit"),
             }
         }
     }
@@ -298,12 +302,17 @@ mod tests {
                 t!(KeyE),
                 t!(KeyX),
                 t!(KeyI),
-                a!(KeyT, Exit), // Immediate action.
+                shutdown!(KeyT), // Unhook the keyboard and exit.
             ],
             // Alt+A -> Q
             vec![
                 t!(KeyA, ModAlt),
-                aot!(KeyQ, Exit), // Action on timeout.
+                aot!(KeyQ, Princess), // Action on timeout.
+            ],
+            // Alt+A -> W
+            vec![
+                t!(KeyA, ModAlt),
+                a!(KeyW, Kenny), // Immediate action.
             ],
             // Alt+A -> [12345]*
             vec![
@@ -332,8 +341,9 @@ mod tests {
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyE)], &[Timeout, Timeout])]
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyE), key!(KeyX)], &[Timeout, Timeout, Timeout])]
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyE), key!(KeyX), key!(KeyI)], &[Timeout, Timeout, Timeout, Timeout])]
-    #[case(demo_mappings(), &[alt!(KeyA), key!(KeyE), key!(KeyX), key!(KeyI), key!(KeyT)], &[Timeout, Timeout, Timeout, Timeout, Action(Exit)])]
-    #[case(demo_mappings(), &[alt!(KeyA), key!(KeyQ)], &[Timeout, ActionOnTimeout(Exit)])]
+    #[case(demo_mappings(), &[alt!(KeyA), key!(KeyE), key!(KeyX), key!(KeyI), key!(KeyT)], &[Timeout, Timeout, Timeout, Timeout, StopTheHook])]
+    #[case(demo_mappings(), &[alt!(KeyA), key!(KeyQ)], &[Timeout, ActionOnTimeout(Princess)])]
+    #[case(demo_mappings(), &[alt!(KeyA), key!(KeyW)], &[Timeout, Action(Kenny)])]
     #[case(demo_mappings(), &[alt!(KeyA), key!(Key1), key!(Key2), key!(Key3), key!(Key4), key!(Key5), key!(Key3)], &[Timeout, ActionOnTimeout(Chan1), t_actions!([Chan1, Chan2], TogChans), t_actions!([Chan1, Chan2, Chan3], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4, Chan5], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4, Chan5, Chan3], TogChans)])]
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyJ), key!(KeyJ), key!(KeyK), key!(KeyK), key!(KeyK)], &[Timeout, ActionBeforeTimeout(VolDown), ActionBeforeTimeout(VolDown), ActionBeforeTimeout(VolUp), ActionBeforeTimeout(VolUp), ActionBeforeTimeout(VolUp)])]
     fn should_validate_demo_mappings(

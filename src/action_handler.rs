@@ -1,5 +1,4 @@
 use crate::types::Event;
-use crate::TerminateHook;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::mpsc;
@@ -24,5 +23,5 @@ where
     A: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
     T: PartialEq + Eq + Clone + Debug + Display + Sync + Send,
 {
-    fn handle(&self, receiver: mpsc::Receiver<Event<A, T>>, sender: mpsc::Sender<TerminateHook>);
+    fn handle(&self, receiver: mpsc::Receiver<Event<A, T>>);
 }

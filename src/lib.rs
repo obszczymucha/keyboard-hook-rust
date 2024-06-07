@@ -44,11 +44,10 @@ where
 
     pub fn hook(&self) -> Result<(), &str> {
         let (tx, rx) = mpsc::channel::<Event<A, T>>();
-        let (shutdown_tx, shutdown_rx) = mpsc::channel::<TerminateHook>();
 
         let handler = self.handler.clone();
         let consumer_handle = thread::spawn(move || {
-            handler.handle(rx, shutdown_tx);
+            handler.handle(rx);
         });
 
         let mappings = self.mappings.clone();
@@ -63,16 +62,7 @@ where
             manager.hook(tx.clone(), handler)
         });
 
-        let shutdown_handle = thread::spawn(move || {
-            shutdown_rx.into_iter().for_each(|action| match action {
-                TerminateHook => {
-                    KeyboardHookManager::stop_windows_loop();
-                }
-            });
-        });
-
         let _ = producer_handle.join().unwrap();
-        shutdown_handle.join().unwrap();
         consumer_handle.join().unwrap();
 
         Ok(())

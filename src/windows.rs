@@ -14,7 +14,7 @@ use winapi::um::winuser::{
     WM_SYSKEYDOWN,
 };
 
-use winapi::um::winuser::VK_LMENU;
+use winapi::um::winuser::{VK_LMENU, VK_LSHIFT};
 
 static mut HOOK_MANAGER: *mut KeyboardHookManager = ptr::null_mut();
 
@@ -119,10 +119,15 @@ impl KeyboardHookManager {
         }
 
         let p_keyboard: &KBDLLHOOKSTRUCT = &*(l_param as *const KBDLLHOOKSTRUCT);
-        let modifiers = if (GetKeyState(VK_LMENU) as u16 & KEY_PRESSED_MASK) != 0 {
-            vec![Modifier::ModAlt]
-        } else {
-            vec![]
+
+        let mut modifiers = vec![];
+
+        if (GetKeyState(VK_LMENU) as u16 & KEY_PRESSED_MASK) != 0 {
+            modifiers.push(Modifier::ModAlt);
+        }
+
+        if (GetKeyState(VK_LSHIFT) as u16 & KEY_PRESSED_MASK) != 0 {
+            modifiers.push(Modifier::ModShift);
         };
 
         match callback.handle(p_keyboard.vkCode, &modifiers) {

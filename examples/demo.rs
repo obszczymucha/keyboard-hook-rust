@@ -4,22 +4,25 @@ use keyboard_hook::aot;
 use keyboard_hook::c;
 use keyboard_hook::key_a;
 use keyboard_hook::key_aot;
+use keyboard_hook::shutdown;
 use keyboard_hook::t;
 use keyboard_hook::types::Event;
 use keyboard_hook::types::Key::*;
 use keyboard_hook::types::Mapping;
 use keyboard_hook::types::Modifier::*;
 use keyboard_hook::types::SystemAction;
-use keyboard_hook::types::TerminateHook;
 use keyboard_hook::ActionHandler;
 use keyboard_hook::KeyboardHook;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::mpsc;
+use SystemAction::*;
 
 #[derive(PartialEq, Eq, Clone, Debug, Hash)]
 #[allow(dead_code)]
 enum MyActions {
+    Princess,
+    Kenny,
     VolumeUp,
     VolumeDown,
     ToggleChannel1,
@@ -35,6 +38,8 @@ use MyActions::*;
 impl Display for MyActions {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            MyActions::Princess => write!(f, "Princess"),
+            MyActions::Kenny => write!(f, "Kenny"),
             MyActions::VolumeUp => write!(f, "VolumeUp"),
             MyActions::VolumeDown => write!(f, "VolumeDown"),
             MyActions::ToggleChannel1 => write!(f, "ToggleChannel1"),
@@ -65,18 +70,13 @@ impl Display for MyTags {
 struct Handler;
 
 impl ActionHandler<MyActions, MyTags> for Handler {
-    fn handle(
-        &self,
-        receiver: mpsc::Receiver<Event<MyActions, MyTags>>,
-        sender: mpsc::Sender<TerminateHook>,
-    ) {
+    fn handle(&self, receiver: mpsc::Receiver<Event<MyActions, MyTags>>) {
         for action in receiver {
             match action {
-                Event::System(SystemAction::KeyboardHooked) => {
-                    println!("Keyboard hooked. Press Alt+A -> E -> X -> I -> T to exit.")
+                Event::System(KeyboardHooked) => {
+                    println!("Hello. Press Alt+A -> E -> X -> I -> T to exit.")
                 }
-                Event::System(SystemAction::KeyboardUnhooked) => println!("Exiting..."),
-                Event::Single(Exit) => sender.send(TerminateHook).unwrap(),
+                Event::System(KeyboardUnhooked) => println!("Exiting..."),
                 Event::Single(action) => println!("Received action: {}", action),
                 Event::Multi(tag, actions) => {
                     println!("Received actions ({:?}): {:?}", tag, actions)
@@ -94,12 +94,17 @@ fn define_mappings() -> Vec<Vec<Mapping<MyActions, MyTags>>> {
             t!(KeyE),
             t!(KeyX),
             t!(KeyI),
-            a!(KeyT, Exit), // Immediate action.
+            shutdown!(KeyT), // Unhook the keyboard and exit.
         ],
         // Alt+A -> Q
         vec![
             t!(KeyA, ModAlt),
-            aot!(KeyQ, Exit), // Action on timeout.
+            aot!(KeyQ, Princess), // Action on timeout.
+        ],
+        // Alt+A -> W
+        vec![
+            t!(KeyA, ModAlt),
+            a!(KeyW, Kenny), // Immediate action.
         ],
         // Alt+A -> [12345]*
         vec![

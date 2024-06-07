@@ -8,6 +8,8 @@ use std::fmt::Display;
 pub enum Modifier {
     NoMod, // TODO: Remove this.
     ModAlt,
+    ModShift,
+    ModAltShift
 }
 
 impl Display for Modifier {
@@ -15,6 +17,8 @@ impl Display for Modifier {
         match self {
             Modifier::NoMod => write!(f, ""),
             Modifier::ModAlt => write!(f, "A"),
+            Modifier::ModShift => write!(f, "S"),
+            Modifier::ModAltShift => write!(f, "A-S"),
         }
     }
 }
@@ -184,6 +188,7 @@ where
     Timeout(KeyPress),
     Action(KeyPress, A),
     ActionOnTimeout(KeyPress, A),
+    Shutdown(KeyPress),
 }
 
 impl<A> Behaviour<A>
@@ -222,6 +227,7 @@ where
             Behaviour::Timeout(key) => key.clone(),
             Behaviour::Action(key, _) => key.clone(),
             Behaviour::ActionOnTimeout(key, _) => key.clone(),
+            Behaviour::Shutdown(key) => key.clone(),
         }
     }
 
@@ -230,6 +236,7 @@ where
             Behaviour::Timeout(KeyPress::Mod(_, modifier)) => modifier,
             Behaviour::Action(KeyPress::Mod(_, modifier), _) => modifier,
             Behaviour::ActionOnTimeout(KeyPress::Mod(_, modifier), _) => modifier,
+            Behaviour::Shutdown(KeyPress::Mod(_, modifier)) => modifier,
         }
     }
 }
@@ -246,6 +253,9 @@ where
             }
             Behaviour::ActionOnTimeout(key, action_type) => {
                 write!(f, "ActionOnTimeoutMapping: {} -> {}", key, action_type)
+            }
+            Behaviour::Shutdown(key) => {
+                write!(f, "ShutdownMapping: {}", key)
             }
         }
     }
