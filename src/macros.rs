@@ -106,25 +106,7 @@ macro_rules! aot {
             $action,
         ))
     };
-
-    ([$($behaviours:expr),* $(,)?], $action:expr) => {
-        Mapping::Single($crate::types::Behaviour::ActionOnTimeout(
-            $crate::types::KeyPress::Mod($key, $crate::types::Modifier::NoMod),
-            $action,
-        ))
-    };
 }
-
-// #[macro_export]
-// macro_rules! abt {
-//     ([$($keypresses:expr),* $(,)?], $action_type:expr) => {
-//         Mapping::Action($crate::types::KeyPresses(vec![$($keypresses),*]).choice(), $crate::types::ActionMapping::TimeoutAfterAction($action_type))
-//     };
-//
-//     ($key:expr, $action:expr) => {
-//         Mapping::Action(Single(KeyPress::nomod($key)), $crate::types::ActionMapping::TimeoutAfterAction($action))
-//     };
-// }
 
 #[macro_export]
 macro_rules! key {

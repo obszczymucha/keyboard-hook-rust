@@ -61,6 +61,10 @@ where
     pub fn get_tag(&self) -> &Option<T> {
         &self.tag
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.actions.is_empty()
+    }
 }
 
 impl<A, T> Display for Actions<A, T>
@@ -116,25 +120,33 @@ where
         Single(behaviour) => match behaviour {
             Behaviour::Timeout(_) => Timeout,
             Behaviour::Action(_, action_type) => Action(action_type.clone()),
-            Behaviour::ActionOnTimeout(_, action_type) => ActionOnTimeout(action_type.clone()),
+            Behaviour::ActionOnTimeout(_, action) => {
+                actions.push_action(action.clone());
+                ActionOnTimeout(action.clone())
+            }
             Behaviour::Shutdown(_) => StopTheHook,
         },
         Choice(behaviours, tag) => {
             match behaviours.get_mapping(key) {
-                Some(mapping) => match (mapping, actions.get_tag()) {
-                    (Behaviour::Timeout(_), None) => Timeout,
-                    (Behaviour::Timeout(_), Some(_)) => ActionsOnTimeout(actions.clone()),
-                    (Behaviour::Action(_, action), None) => ActionBeforeTimeout(action.clone()),
-                    (Behaviour::Action(_, action), Some(_)) => ActionsBeforeAndOnTimeout {
+                Some(mapping) => match (mapping, actions.is_empty()) {
+                    (Behaviour::Timeout(_), true) => Timeout,
+                    (Behaviour::Timeout(_), false) => ActionsOnTimeout(actions.clone()),
+                    (Behaviour::Action(_, action), true) => ActionBeforeTimeout(action.clone()),
+                    (Behaviour::Action(_, action), false) => ActionsBeforeAndOnTimeout {
                         before: action.clone(),
                         on: actions.clone(),
                     },
-                    (Behaviour::ActionOnTimeout(_, action), None) => {
+                    (Behaviour::ActionOnTimeout(_, action), true) => {
                         actions.push(action.clone(), tag.clone());
                         ActionsOnTimeout(actions.clone())
                     }
-                    (Behaviour::ActionOnTimeout(_, action), Some(_)) => {
-                        actions.push_action(action.clone());
+                    (Behaviour::ActionOnTimeout(_, action), false) => {
+                        if actions.get_tag().is_none() {
+                            actions.push(action.clone(), tag.clone());
+                        } else {
+                            actions.push_action(action.clone());
+                        }
+
                         ActionsOnTimeout(actions.clone())
                     }
                     (Behaviour::Shutdown(_), _) => StopTheHook,
@@ -195,6 +207,7 @@ mod tests {
         Chan3,
         Chan4,
         Chan5,
+        UseStrip2,
     }
 
     use TestAction::*;
@@ -211,6 +224,7 @@ mod tests {
                 TestAction::Chan3 => write!(f, "ToggleChannel3"),
                 TestAction::Chan4 => write!(f, "ToggleChannel4"),
                 TestAction::Chan5 => write!(f, "ToggleChannel5"),
+                TestAction::UseStrip2 => write!(f, "UseStrip2"),
             }
         }
     }
@@ -306,6 +320,22 @@ mod tests {
                 t!(KeyA, ModAlt),
                 a!(KeyW, Kenny), // Immediate action.
             ],
+            // Alt+A -> S -> 2 -> [12345]*
+            vec![
+                t!(KeyA, ModAlt),
+                t!(KeyS),
+                aot!(Key2, UseStrip2),
+                c!(
+                    [
+                        key_aot!(Key1, Chan1),
+                        key_aot!(Key2, Chan2),
+                        key_aot!(Key3, Chan3),
+                        key_aot!(Key4, Chan4),
+                        key_aot!(Key5, Chan5)
+                    ],
+                    TogChans
+                ),
+            ],
             // Alt+A -> [12345]*
             vec![
                 t!(KeyA, ModAlt),
@@ -338,6 +368,7 @@ mod tests {
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyW)], &[Timeout, Action(Kenny)])]
     #[case(demo_mappings(), &[alt!(KeyA), key!(Key1), key!(Key2), key!(Key3), key!(Key4), key!(Key5), key!(Key3)], &[Timeout, t_actions!([Chan1], TogChans), t_actions!([Chan1, Chan2], TogChans), t_actions!([Chan1, Chan2, Chan3], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4, Chan5], TogChans), t_actions!([Chan1, Chan2, Chan3, Chan4, Chan5, Chan3], TogChans)])]
     #[case(demo_mappings(), &[alt!(KeyA), key!(KeyJ), key!(KeyJ), key!(KeyK), key!(KeyK), key!(KeyK)], &[Timeout, ActionBeforeTimeout(VolDown), ActionBeforeTimeout(VolDown), ActionBeforeTimeout(VolUp), ActionBeforeTimeout(VolUp), ActionBeforeTimeout(VolUp)])]
+    #[case(demo_mappings(), &[alt!(KeyA), key!(KeyS), key!(Key2), key!(Key1), key!(Key2), key!(Key3), key!(Key4), key!(Key5), key!(Key3)], &[Timeout, Timeout, ActionOnTimeout(UseStrip2), t_actions!([UseStrip2, Chan1], TogChans), t_actions!([UseStrip2, Chan1, Chan2], TogChans), t_actions!([UseStrip2, Chan1, Chan2, Chan3], TogChans), t_actions!([UseStrip2, Chan1, Chan2, Chan3, Chan4], TogChans), t_actions!([UseStrip2, Chan1, Chan2, Chan3, Chan4, Chan5], TogChans), t_actions!([UseStrip2, Chan1, Chan2, Chan3, Chan4, Chan5, Chan3], TogChans)])]
     fn should_validate_demo_mappings(
         #[case] mappings: Vec<Vec<Mapping<TestAction, TestTag>>>,
         #[case] keypresses: &[KeyPress],

@@ -30,7 +30,7 @@ enum MyActions {
     ToggleChannel3,
     ToggleChannel4,
     ToggleChannel5,
-    Exit,
+    UseStrip2,
 }
 
 use MyActions::*;
@@ -47,7 +47,7 @@ impl Display for MyActions {
             MyActions::ToggleChannel3 => write!(f, "ToggleChannel3"),
             MyActions::ToggleChannel4 => write!(f, "ToggleChannel4"),
             MyActions::ToggleChannel5 => write!(f, "ToggleChannel5"),
-            MyActions::Exit => write!(f, "Exit"),
+            MyActions::UseStrip2 => write!(f, "UseStrip2"),
         }
     }
 }
@@ -105,6 +105,22 @@ fn define_mappings() -> Vec<Vec<Mapping<MyActions, MyTags>>> {
         vec![
             t!(KeyA, ModAlt),
             a!(KeyW, Kenny), // Immediate action.
+        ],
+        // Alt+A -> S -> 2 -> [12345]*
+        vec![
+            t!(KeyA, ModAlt),
+            t!(KeyS),
+            aot!(Key2, UseStrip2),
+            c!(
+                [
+                    key_aot!(Key1, ToggleChannel1),
+                    key_aot!(Key2, ToggleChannel2),
+                    key_aot!(Key3, ToggleChannel3),
+                    key_aot!(Key4, ToggleChannel4),
+                    key_aot!(Key5, ToggleChannel5)
+                ],
+                ToggleChannels
+            ),
         ],
         // Alt+A -> [12345]*
         vec![
